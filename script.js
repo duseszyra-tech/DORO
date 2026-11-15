@@ -1900,7 +1900,6 @@ document.addEventListener('DOMContentLoaded', () => {
       user.status = val || defaultStatus();
       saveUser();
       paintTrigger(); closeMenu(); renderProfile();
-      
     }
 
     trigger.addEventListener('click', (e) => {
@@ -1968,7 +1967,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // обновить профиль + превью
         renderProfile();
         if (typeof window.__paintProfilePreview === 'function') window.__paintProfilePreview();
-        
       });
       palette.appendChild(btn);
     });
