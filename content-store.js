@@ -1,18 +1,55 @@
-// ============================================================
-//  content-store.js — работа с темами из Firestore
-// ============================================================
+// Темы из репозитория и персональные изменения в этом браузере.
 (function () {
   'use strict';
 
-  const topicsCache = new Map();
-  const TOPICS_CACHE_MAX = 10;
-  function cacheSet(key, value) {
-    topicsCache.set(key, value);
-    if (topicsCache.size > TOPICS_CACHE_MAX) {
-      const firstKey = topicsCache.keys().next().value;
-      topicsCache.delete(firstKey);
+  const catalog = new Map();
+  const storageKey = subject => 'doro.localTopics.v1.' + subject;
+  const sameNumber = (a, b) => String(a) === String(b);
+  function getSubject(key) {
+    const subject = window.subjects[key];
+    if (!subject) throw new Error('Предмет не найден');
+    if (!catalog.has(key)) catalog.set(key, subject.topics.slice());
+    return subject;
+  }
+
+  function readChanges(key) {
+    return JSON.parse(localStorage.getItem(storageKey(key)) || '[]');
+  }
+
+  function applyChanges(key, changes) {
+    const subject = getSubject(key);
+    const topics = catalog.get(key).slice();
+    for (const change of changes) {
+      const index = topics.findIndex(topic => sameNumber(topic.num, change.num));
+      if (change.deleted) {
+        if (index >= 0) topics.splice(index, 1);
+      } else if (index >= 0) {
+        topics[index] = { ...topics[index], ...change };
+      } else {
+        topics.push(change);
+      }
+    }
+    subject.topics = topics;
+  }
+
+  function saveChanges(key, updates) {
+    const changes = readChanges(key).filter(topic =>
+      !updates.some(update => sameNumber(update.num, topic.num))
+    ).concat(updates);
+    localStorage.setItem(storageKey(key), JSON.stringify(changes));
+    applyChanges(key, changes);
+  }
+
+  function checkNumber(key, num) {
+    if (getSubject(key).topics.some(topic => sameNumber(topic.num, num))) {
+      throw new Error('Тема с таким номером уже есть');
     }
   }
+
+  function localTopic(data) {
+    return { ...data, date: formatDateForDb(data.date), pdf: data.pdfFiles?.[0] || null };
+  }
+
   // Преобразует ДД.ММ.ГГГГ или ДД-ММ-ГГГГ в 2026-11-10 (для базы и календаря)
   function formatDateForDb(dateStr) {
     if (!dateStr) return '';
@@ -43,186 +80,41 @@
   }
 
   window.doroContent = {
-    // 1. Загрузка ВСЕХ тем из базы при старте сайта
     async loadAllTopics() {
-      if (!window.doroDb) return;
-      try {
-        const { getDocs, collection } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-        const snap = await getDocs(collection(window.doroDb, 'topics'));
-        
-        snap.forEach(doc => {
-          const data = doc.data();
-          const subjectKey = data.subjectKey;
-          
-          // Если такого раздела нет, пропускаем
-          if (!window.subjects || !window.subjects[subjectKey]) return;
-          
-          // Ищем, есть ли уже такая тема в старом списке (по номеру)
-          const existingIndex = window.subjects[subjectKey].topics.findIndex(t => String(t.num) === String(data.num));
-          
-          const newTopic = {
-            num: data.num,
-            title: data.title,
-            steps: data.steps || [],
-            date: formatDateForDb(data.date), // Конвертируем дату из базы в ISO формат
-            pdf: data.pdfFiles && data.pdfFiles[0] ? data.pdfFiles[0] : null,
-            isFromDb: true 
-          };
-
-          // Если у темы есть текст в базе — кладем его в кэш
-          if (data.content) {
-            cacheSet(`${subjectKey}_${data.num}`, data.content);
-          }
-
-          if (existingIndex !== -1) {
-            window.subjects[subjectKey].topics[existingIndex] = { ...window.subjects[subjectKey].topics[existingIndex], ...newTopic };
-          } else {
-            window.subjects[subjectKey].topics.push(newTopic);
-          }
-        });
-        console.log('[content] Список тем обновлен из базы');
-      } catch (e) {
-        console.warn('[content] Не удалось загрузить список тем:', e);
-      }
+      for (const key of Object.keys(window.subjects)) applyChanges(key, readChanges(key));
     },
 
-    // 2. Загрузка текста темы (сначала из кэша, потом fetch)
     async loadTopicContent(topic) {
-      const subjectKey = topic.subjectKey || window.currentSubjectKey || 'unknown';
-      const topicId = `${subjectKey}_${topic.num}`;
-
-      if (topicsCache.has(topicId)) {
-        return topicsCache.get(topicId);
-      }
-
-      // Тема есть только в базе (loadAllTopics не успел / content не подтянулся)
-      if (topic.isFromDb && window.doroDb) {
-        try {
-          const { getDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-          const snap = await getDoc(doc(window.doroDb, 'topics', topicId));
-          if (snap.exists() && snap.data().content) {
-            const text = snap.data().content;
-            cacheSet(topicId, text);
-            return text;
-          }
-        } catch (e) { console.warn('[content] getDoc fallback failed:', e); }
-      }
-
-      // Если это старая тема с GitHub — грузим и сохраняем в базу
-      if (topic.file) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
-          const res = await fetch(topic.file, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const text = await res.text();
-          cacheSet(topicId, text);
-          
-          if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => window.doroContent.syncToDb(topicId, subjectKey, topic, text));
-          } else {
-            setTimeout(() => window.doroContent.syncToDb(topicId, subjectKey, topic, text), 2000);
-          }
-          return text;
-        } catch (e) {
-          console.error('Ошибка загрузки ' + topic.file, e);
-          return `Не удалось загрузить файл темы: ${topic.file}`;
-        }
-      }
-
-      return '<p class="reader__empty">Файл темы пуст.</p>';
+      if (typeof topic.content === 'string') return topic.content;
+      if (!topic.file) return '<p class="reader__empty">Файл темы пуст.</p>';
+      const response = await fetch(topic.file);
+      if (!response.ok) throw new Error('Не удалось загрузить тему: ' + response.status);
+      return response.text();
     },
 
-    // 3. Сохранение старого файла в базу (ленивая миграция)
-    async syncToDb(topicId, subjectKey, topic, text) {
-      try {
-        if (!window.doroDb) return;
-        const { setDoc, doc, serverTimestamp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-        
-        await setDoc(doc(window.doroDb, 'topics', topicId), {
-          subjectKey: subjectKey,
-          num: topic.num,
-          title: topic.title,
-          date: formatDateForDb(topic.date || ''),
-          steps: topic.steps || [],
-          pdfFiles: topic.pdf ? [topic.pdf] : [],
-          content: text,
-          status: 'published',
-          author: 'Автомиграция',
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-        
-        console.log(`[content] Тема ${topicId} сохранена в базу (миграция)`);
-      } catch (e) {
-        console.warn('[content] Не удалось сохранить в базу:', e);
+    async createTopic(key, data) {
+      checkNumber(key, data.num);
+      saveChanges(key, [localTopic(data)]);
+      return key + '_' + data.num;
+    },
+
+    async updateTopic(key, oldNum, data) {
+      const updates = [];
+      if (!sameNumber(oldNum, data.num)) {
+        checkNumber(key, data.num);
+        updates.push({ num: oldNum, deleted: true });
       }
+      const previous = getSubject(key).topics.find(topic => sameNumber(topic.num, oldNum));
+      updates.push({ ...previous, ...localTopic(data) });
+      saveChanges(key, updates);
+      return key + '_' + data.num;
     },
 
-    // 4. Создание новой темы (для редакторов)
-    async createTopic(subjectKey, data) {
-      if (!window.doroDb) return false;
-      const { setDoc, doc, serverTimestamp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-      const topicId = `${subjectKey}_${data.num || Date.now()}`;
-      
-      await setDoc(doc(window.doroDb, 'topics', topicId), {
-        subjectKey: subjectKey,
-        num: data.num || '',
-        title: data.title || 'Без названия',
-        date: formatDateForDb(data.date || ''),
-        steps: data.steps || [],
-        pdfFiles: data.pdfFiles || [],
-        content: data.content || '',
-        status: data.status || 'draft',
-        author: data.author || 'Редактор',
-        updatedAt: serverTimestamp()
-      });
-      
-      return topicId;
-    },
-
-    // 5. Удаление темы
-    async deleteTopic(subjectKey, num) {
-      if (!window.doroDb) return false;
-      const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-      const topicId = `${subjectKey}_${num}`;
-      await deleteDoc(doc(window.doroDb, 'topics', topicId));
+    async deleteTopic(key, num) {
+      saveChanges(key, [{ num, deleted: true }]);
       return true;
     },
 
-    // 6. Обновление существующей темы
-    async updateTopic(subjectKey, oldNum, data) {
-      if (!window.doroDb) return false;
-      const { setDoc, doc, deleteDoc, serverTimestamp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-      
-      const oldTopicId = `${subjectKey}_${oldNum}`;
-      const newTopicId = `${subjectKey}_${data.num || oldNum}`;
-      
-      // Если номер изменился, удаляем старый документ
-      if (oldTopicId !== newTopicId) {
-        await deleteDoc(doc(window.doroDb, 'topics', oldTopicId));
-      }
-
-      await setDoc(doc(window.doroDb, 'topics', newTopicId), {
-        subjectKey: subjectKey,
-        num: data.num || oldNum,
-        title: data.title,
-        date: formatDateForDb(data.date || ''),
-        steps: data.steps || [],
-        pdfFiles: data.pdfFiles || [],
-        content: data.content || '',
-        status: data.status || 'published',
-        author: data.author || 'Редактор',
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      
-      return newTopicId;
-    },
-
-    // Экспортируем вспомогательные функции для editor-ui.js
-    formatDateForInput: formatDateForInput
+    formatDateForInput
   };
-
-  console.log('[content-store] Готов к работе');
 })();

@@ -865,7 +865,6 @@ function renderPhysioSolveMode(raw, container) {
   const topicTitle   = _meta.title || '';
   const subjectTitle = (window.subjects && window.subjects[subjectKey]?.title) || subjectKey;
 
-  const quizKey = `${subjectKey}_${topicNum}`;
   const allQuestions = parseTestsToQuestions(raw);
 
   if (!allQuestions.length) {
@@ -875,17 +874,6 @@ function renderPhysioSolveMode(raw, container) {
 
   // ================= СТАРТОВЫЙ ЭКРАН =================
   function renderStartScreen() {
-    const isPremium = window.doroPremium && window.doroPremium.isPremiumActive();
-    const attemptsLeft = window.doroPremium
-      ? window.doroPremium.quizAttemptsLeft(quizKey)
-      : Infinity;
-    const canStart = !window.doroPremium || window.doroPremium.canStartQuiz(quizKey);
-    const freeLimit = window.doroPremium ? window.doroPremium.QUIZ_LIMIT_FREE : 10;
-
-    const limitLabel = isPremium
-      ? 'Golden: без ограничений'
-      : `Осталось попыток: ${attemptsLeft} из ${freeLimit}`;
-
     container.innerHTML = `
       <div class="quiz-start">
         <div class="quiz-start__icon" aria-hidden="true">
@@ -897,26 +885,8 @@ function renderPhysioSolveMode(raw, container) {
         <h2 class="quiz-start__title">Тесты по теме</h2>
         <p class="quiz-start__sub">
           Всего вопросов: <b>${allQuestions.length}</b>.
-          ${isPremium
-            ? 'В Golden попытки не ограничены.'
-            : `Бесплатно можно пройти <b>${freeLimit} раз</b> по каждому предмету.`}
         </p>
-        <div class="quiz-start__limit ${!isPremium && attemptsLeft <= 3 ? 'quiz-start__limit--warn' : ''}">
-          ${limitLabel}
-        </div>
-        ${
-          canStart
-            ? `<button type="button" class="quiz-start__btn" id="quizStartBtn">
-                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                 Решать тесты
-               </button>`
-            : `<button type="button" class="quiz-start__btn quiz-start__btn--locked" disabled>
-                 Попытки закончились
-               </button>
-               <button type="button" class="quiz-start__go-premium" id="quizGoPremiumBtn">
-                 Открыть Golden
-               </button>`
-        }
+        <button type="button" class="quiz-start__btn" id="quizStartBtn">Решать тесты</button>
         <button type="button" class="quiz-start__read-btn" id="quizReadBtn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           Просто посмотреть ответы
@@ -924,23 +894,7 @@ function renderPhysioSolveMode(raw, container) {
       </div>
     `;
 
-    const startBtn = container.querySelector('#quizStartBtn');
-    if (startBtn && canStart) {
-      startBtn.addEventListener('click', () => {
-        if (window.doroPremium) window.doroPremium.addQuizAttempt(quizKey);
-        openQuizOverlay();
-      });
-    }
-
-    const premiumBtn = container.querySelector('#quizGoPremiumBtn');
-    if (premiumBtn) {
-      premiumBtn.addEventListener('click', () => {
-        const backBtn = document.getElementById('readerBack');
-        if (backBtn) backBtn.click();
-        const navLink = document.querySelector('.nav a[data-view="premium"]');
-        if (navLink) navLink.click();
-      });
-    }
+    container.querySelector('#quizStartBtn').addEventListener('click', openQuizOverlay);
 
     const readBtn = container.querySelector('#quizReadBtn');
     if (readBtn) {
@@ -1157,7 +1111,6 @@ function renderPhysioSolveMode(raw, container) {
       const mark = correctCount === total ? '5' :
                    correctCount >= total * 0.8 ? '4' :
                    correctCount >= total * 0.6 ? '3' : '2';
-      const isGolden = window.doroPremium && window.doroPremium.isPremiumActive();
       const tone = percent >= 80 ? 'good' : percent >= 60 ? 'mid' : 'bad';
 
       stepEl.textContent = String(total);
@@ -1181,10 +1134,6 @@ function renderPhysioSolveMode(raw, container) {
           </div>
           <div class="qt-result__meta">
             <span class="qt-result__mark">Оценка <b>${mark}</b></span>
-            ${isGolden ? `<span class="qt-result__golden">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.9L2 9.3l7.1-.4L12 2z"/></svg>
-              Golden
-            </span>` : ''}
           </div>
         </div>
 
@@ -1442,8 +1391,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const readerSettingsClose = $('readerSettingsClose');
   const readerSettingsBackdrop = $('readerSettingsBackdrop');
   const fontValue = $('fontValue');
-  const views = { home: $('view-home'), files: $('view-files'), links: $('view-links'), premium: $('view-premium'), profile: $('view-profile'), admin: $('view-admin') };
-  const rendered = { home: false, files: false, links: false, premium: false, profile: false, admin: false };
+  const views = { home: $('view-home'), files: $('view-files'), links: $('view-links'), premium: $('view-premium'), profile: $('view-profile') };
+  const rendered = { home: false, files: false, links: false, premium: false, profile: false };
   window.currentSubjectKey = null;
   window.currentTopicMeta = null;
   let user = JSON.parse(localStorage.getItem('doro.user') || 'null');
@@ -1493,10 +1442,6 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'animated',label: 'Градиент' }
   ];
 
-  function isGolden() {
-    return !!(window.doroPremium && window.doroPremium.isPremiumActive());
-  }
-
   // ---------- ТЕМА ----------
   const THEME_KEY = 'doro.theme';
   const THEME_MODE_KEY = 'doro.themeMode';
@@ -1525,24 +1470,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // новая кнопка «Тема» сама себя перерисовывает через paintRsThemeBtn
   }
   function syncAllThemeSwitchers() { syncThemeSeg(); syncReaderTheme(); }
-  // Подстраховка: если Firebase не ответил, но в резервной копии есть подписка — восстанавливаем
-  (function restorePremiumBackup() {
-    try {
-      const backup = localStorage.getItem('doro.premium.backup');
-      const current = localStorage.getItem('doro.premium.v1');
-      const isCurrentlyActive = current ? JSON.parse(current).active : false;
-      
-      if (backup && !isCurrentlyActive) {
-        const p = JSON.parse(backup);
-        if (p.expiresAt && p.expiresAt > Date.now()) {
-          window.doroPremium.savePremium(p);
-          console.log('✅ Подписка восстановлена из резервной копии');
-        } else {
-          localStorage.removeItem('doro.premium.backup');
-        }
-      }
-    } catch (e) {}
-  })();
   (function initTheme() {
     const mode = getThemeMode();
     const theme = resolveTheme(mode);
@@ -1738,16 +1665,6 @@ document.addEventListener('DOMContentLoaded', () => {
       avatar.classList.remove('avatar--emoji');
     }
   }
-  async function syncProfileToCloud() {
-    try {
-      if (!window.doroCloudReady) return;
-      const cloud = await window.doroCloudReady;
-      if (!cloud) return;
-      await cloud.saveProfile(user || {});
-    } catch (e) {
-      console.warn('Cloud save failed:', e);
-    }
-  }
   function renderProfile() {
     const avatarLetter = $('avatarLetter');
     const heroLetter = $('profileHeroLetter');
@@ -1762,8 +1679,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (user && user.name) {
       const initials = getInitials(user.name);
-      // В шапке тоже показываем смайлик, если он выбран и Golden активен
-      const useEmoji = isGolden() && user.avatarEmoji;
+      const useEmoji = user.avatarEmoji;
       if (avatarLetter) {
         avatarLetter.textContent = useEmoji ? user.avatarEmoji : initials;
       }
@@ -1782,9 +1698,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const accentColor = user?.color || '#3b82f6';
     if (heroAvatar) {
       const c = accentColor;
-      const useEmoji = isGolden() && user?.avatarEmoji;
+      const useEmoji = user?.avatarEmoji;
       heroAvatar.style.setProperty('--ac', c);
-      heroAvatar.dataset.frame = (isGolden() && user?.avatarFrame) ? user.avatarFrame : 'none';
+      heroAvatar.dataset.frame = (user?.avatarFrame) ? user.avatarFrame : 'none';
       if (useEmoji) {
         heroAvatar.style.background = `
           radial-gradient(circle at 30% 25%, rgba(255,255,255,0.85), transparent 55%),
@@ -1803,7 +1719,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     // В шапке тоже применяем рамку
-    if (avatar && isGolden() && user?.avatarFrame && user.avatarFrame !== 'none') {
+    if (avatar && user?.avatarFrame && user.avatarFrame !== 'none') {
       avatar.dataset.frame = user.avatarFrame;
     } else if (avatar) {
       delete avatar.dataset.frame;
@@ -1812,14 +1728,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileCard = document.querySelector('.profile-card');
     if (profileCard) {
       profileCard.style.setProperty('--ac', accentColor);
-      const bg = (isGolden() && user?.profileBg) ? user.profileBg : 'default';
-      const fx = (isGolden() && user?.profileEffect) ? user.profileEffect : 'default';
+      const bg = (user?.profileBg) ? user.profileBg : 'default';
+      const fx = (user?.profileEffect) ? user.profileEffect : 'default';
       profileCard.dataset.bg = bg;
       profileCard.dataset.effect = fx;
 
           // Бейдж рядом с именем (nameStyle и decor больше не поддерживаем)
       const badgeMap = { fire:'🔥', medal:'🥇', bolt:'⚡', diamond:'💎', grad:'🎓', crown:'👑' };
-      const bId = (isGolden() && user?.profileBadge) ? user.profileBadge : 'none';
+      const bId = (user?.profileBadge) ? user.profileBadge : 'none';
       const nameEl = document.getElementById('profileNameDisplay');
       if (nameEl) {
         const nameText = user && user.name ? user.name : 'Профиль';
@@ -1868,47 +1784,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.__openProfileSheet = openProfileSheet;
   if (saveNameBtn) {
-    saveNameBtn.addEventListener('click', async () => {
+    saveNameBtn.addEventListener('click', () => {
       if (!nameInput) return;
-      let val = nameInput.value.trim();
+      const val = nameInput.value.trim();
       if (!val) return;
-      if (!/^[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z\-]{1,}$/.test(val) ||
-          ['человек','чел','ник','никнейм','имя','тест','test','user','юзер','аноним','anon','none','нет','не знаю'].includes(val.toLowerCase())) {
-        alert('Пожалуйста, укажите настоящее имя (например, «Аня»). Ники и одна буква не подходят.');
-        return;
-      }
-      val = val.split(/\s+/)[0];
-      if (!val) return;
-
-      const oldUser = JSON.parse(localStorage.getItem('doro.user') || 'null');
-      const oldId = (oldUser && oldUser.name && oldUser.group)
-        ? ((oldUser.name.trim().toLowerCase().replace(/\s+/g, ' ')) + '__' + oldUser.group.trim().toUpperCase())
-        : null;
-
       user = user || {};
       user.name = val;
       saveUser();
       nameInput.value = val;
       renderProfile();
       closeProfileSheet();
-
-      try {
-        if (window.doroCloudReady) {
-          const cloud = await window.doroCloudReady;
-          if (cloud) {
-            // Сохраняем новый документ (ID = name__group)
-            await cloud.saveProfile(user);
-            // Удаляем старый, если он был и отличается
-            const newId = user.name.trim().toLowerCase().replace(/\s+/g, ' ') + '__' + (user.group || '').trim().toUpperCase();
-            if (oldId && oldId !== newId && cloud.deleteUserDoc) {
-              try { await cloud.deleteUserDoc(oldId); } catch (e) {}
-              try { localStorage.removeItem('doro.usersCache.v2'); } catch (e) {}
-              usersCache = null;
-              usersCacheTime = 0;
-            }
-          }
-        }
-      } catch (e) { console.warn('Cloud save failed:', e); }
     });
   }
   if (nameInput && saveNameBtn) nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNameBtn.click(); });
@@ -1936,43 +1821,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    async function saveGroup() {
+    function saveGroup() {
       if (!chain || !chain.isComplete()) return;
       const p = chain.getParts();
       const groupStr = formatGroup(p);
-
-      if (groupStr && groupStr !== user.group && isGroupFull(groupStr)) {
-        alert(`Группа ${groupStr} закрыта для новых участников (полная группа).`);
-        applyUserGroup();
-        return;
-      }
-
-      const oldUser = JSON.parse(localStorage.getItem('doro.user') || 'null');
-      const oldId = (oldUser && oldUser.name && oldUser.group)
-        ? ((oldUser.name.trim().toLowerCase().replace(/\s+/g, ' ')) + '__' + oldUser.group.trim().toUpperCase())
-        : null;
-
       if (!user) user = {};
       user.group = groupStr;
       saveUser();
       renderProfile();
       if (typeof window.__refreshSchedule === 'function') window.__refreshSchedule();
-
-      try {
-        if (window.doroCloudReady) {
-          const cloud = await window.doroCloudReady;
-          if (cloud) {
-            await cloud.saveProfile(user);
-            const newId = (user.name || '').trim().toLowerCase().replace(/\s+/g, ' ') + '__' + groupStr.trim().toUpperCase();
-            if (oldId && oldId !== newId && cloud.deleteUserDoc) {
-              try { await cloud.deleteUserDoc(oldId); } catch (e) {}
-              try { localStorage.removeItem('doro.usersCache.v2'); } catch (e) {}
-              usersCache = null;
-              usersCacheTime = 0;
-            }
-          }
-        }
-      } catch (e) { console.warn('Cloud save failed:', e); }
     }
 
     // Цепочка: ввёл всё — сохраняем автоматически
@@ -2017,7 +1874,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user && !user.status) {
       user.status = defaultStatus();
       saveUser();
-      syncProfileToCloud();
     }
 
     function paintTrigger() {
@@ -2044,7 +1900,7 @@ document.addEventListener('DOMContentLoaded', () => {
       user.status = val || defaultStatus();
       saveUser();
       paintTrigger(); closeMenu(); renderProfile();
-      syncProfileToCloud();
+      
     }
 
     trigger.addEventListener('click', (e) => {
@@ -2112,7 +1968,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // обновить профиль + превью
         renderProfile();
         if (typeof window.__paintProfilePreview === 'function') window.__paintProfilePreview();
-        syncProfileToCloud();
+        
       });
       palette.appendChild(btn);
     });
@@ -2138,9 +1994,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const bgGrid     = $('peBgGrid');
     const badgeChips = $('peBadgeChips');
     const fxChips    = $('peFxChips');
-    const goldenLock = $('peGoldenLock');
-    const goldenBody = $('peGoldenBody');
-    const goldenCta  = $('peGoldenCta');
 
     if (!prevCard) return;
 
@@ -2148,7 +2001,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const FRAME_LABELS = { none:'Без рамки', gold:'Золото', neon:'Неон', dashed:'Пунктир', glow:'Свечение' };
     const EFFECT_LABELS = { default:'Стекло', glow:'Свечение', animated:'Градиент' };
 
-    function golden() { return !!(window.doroPremium && window.doroPremium.isPremiumActive()); }
 
     function paintEmojiGrid() {
       if (!emojiGrid) return;
@@ -2202,13 +2054,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function paintAvatarMode() {
       if (!modeWrap) return;
-      const g = golden();
-      const hasEmoji = !!user?.avatarEmoji && g;
+      const hasEmoji = !!user?.avatarEmoji;
       modeWrap.querySelectorAll('.pe-seg__btn').forEach(b => {
         b.classList.toggle('is-active', (b.dataset.mode === 'emoji') === hasEmoji);
         if (b.dataset.mode === 'emoji') {
-          b.classList.toggle('is-locked', !g);
-          b.title = g ? 'Выбрать смайлик' : 'Доступно в Golden';
+          b.title = 'Выбрать смайлик';
         }
       });
       if (emojiRow) emojiRow.hidden = !hasEmoji;
@@ -2225,8 +2075,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const badge = user?.profileBadge || 'none';
 
       prevCard.style.setProperty('--ac', c);
-      prevCard.dataset.bg = golden() ? bg : 'default';
-      prevCard.dataset.effect = golden() ? fx : 'default';
+      prevCard.dataset.bg = bg;
+      prevCard.dataset.effect = fx;
 
       if (prevAvatar) {
         prevAvatar.style.setProperty('--ac', c);
@@ -2240,13 +2090,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           prevAvatar.style.background = `radial-gradient(circle at 30% 25%, rgba(255,255,255,0.4), transparent 55%), linear-gradient(135deg, ${c}, ${c})`;
         }
-        prevAvatar.dataset.frame = golden() ? frame : 'none';
+        prevAvatar.dataset.frame = frame;
         prevAvatar.classList.toggle('is-emoji', !!emoji);
       }
       if (prevText) prevText.textContent = emoji ? emoji : (user?.name ? getInitials(user.name) : '?');
 
       if (prevName) {
-        if (golden() && badge !== 'none' && BADGE_EMOJI[badge]) {
+        if (badge !== 'none' && BADGE_EMOJI[badge]) {
           prevName.innerHTML = `${escapeHtml(name)}<span class="pe-preview__badge">${BADGE_EMOJI[badge]}</span>`;
         } else {
           prevName.textContent = name;
@@ -2254,45 +2104,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (prevStatus) prevStatus.textContent = user?.status || 'Статус';
       if (prevGroup) prevGroup.textContent = user?.group ? 'Группа ' + user.group : 'Группа';
-    }
-
-    function paintGoldenAccess() {
-      const ok = golden();
-      if (goldenLock) goldenLock.hidden = ok;
-      if (goldenBody) goldenBody.hidden = !ok;
-      if (!goldenCta) return;
-      if (ok) {
-        const days = window.doroPremium ? window.doroPremium.daysLeft() : 0;
-        const wordDays = (n => {
-          const m10 = n % 10, m100 = n % 100;
-          if (m10 === 1 && m100 !== 11) return 'день';
-          if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return 'дня';
-          return 'дней';
-        })(days);
-        goldenCta.hidden = false;
-        goldenCta.classList.add('is-active');
-        goldenCta.innerHTML = `
-          <div class="pe-golden-cta__status">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.9L2 9.3l7.1-.4L12 2z"/>
-            </svg>
-            <span>Golden активен · осталось <b>${days} ${wordDays}</b></span>
-          </div>
-        `;
-      } else {
-        goldenCta.hidden = false;
-        goldenCta.classList.remove('is-active');
-        goldenCta.innerHTML = `
-          <p class="pe-golden-cta__text">Открой оформление профиля и ещё кучу всего с Golden.</p>
-          <button type="button" class="pe-golden-cta__btn" id="peGoldenGo">Открыть Golden</button>
-        `;
-        const go = goldenCta.querySelector('#peGoldenGo');
-        if (go) go.addEventListener('click', () => {
-          if (typeof setActivePanel === 'function') setActivePanel(null);
-          const navLink = document.querySelector('.nav a[data-view="premium"]');
-          if (navLink) navLink.click();
-        });
-      }
     }
 
     function paintAll() {
@@ -2303,7 +2114,6 @@ document.addEventListener('DOMContentLoaded', () => {
       paintBgGrid();
       paintBadgeChips();
       paintFxChips();
-      paintGoldenAccess();
     }
 
     window.__paintProfilePreview = paintPreview;
@@ -2319,796 +2129,57 @@ document.addEventListener('DOMContentLoaded', () => {
     // Реакции
     if (modeWrap) modeWrap.addEventListener('click', (e) => {
       const btn = e.target.closest('.pe-seg__btn'); if (!btn) return;
-      if (btn.dataset.mode === 'emoji' && !golden()) {
-        const gs = document.getElementById('peGoldenSection');
-        if (gs) {
-          gs.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          gs.classList.add('is-nudged');
-          setTimeout(() => gs.classList.remove('is-nudged'), 900);
-        }
-        return;
-      }
       if (!user) user = {};
       if (btn.dataset.mode === 'emoji') {
         if (!user.avatarEmoji) user.avatarEmoji = AVATAR_EMOJIS[0];
       } else {
         user.avatarEmoji = '';
       }
-      saveUser(); paintAll(); renderProfile(); syncProfileToCloud();
+      saveUser(); paintAll(); renderProfile();
     });
 
     if (emojiGrid) emojiGrid.addEventListener('click', (e) => {
       const btn = e.target.closest('.pe-emoji'); if (!btn) return;
       if (!user) user = {};
       user.avatarEmoji = btn.dataset.emoji;
-      saveUser(); paintAll(); renderProfile(); syncProfileToCloud();
+      saveUser(); paintAll(); renderProfile();
     });
 
     if (frameChips) frameChips.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-frame]'); if (!btn) return;
       if (!user) user = {};
       user.avatarFrame = btn.dataset.frame;
-      saveUser(); paintAll(); renderProfile(); syncProfileToCloud();
+      saveUser(); paintAll(); renderProfile();
     });
 
     if (bgGrid) bgGrid.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-bg]'); if (!btn) return;
       if (!user) user = {};
       user.profileBg = btn.dataset.bg;
-      saveUser(); paintAll(); renderProfile(); syncProfileToCloud();
+      saveUser(); paintAll(); renderProfile();
     });
 
     if (badgeChips) badgeChips.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-badge]'); if (!btn) return;
       if (!user) user = {};
       user.profileBadge = btn.dataset.badge;
-      saveUser(); paintAll(); renderProfile(); syncProfileToCloud();
+      saveUser(); paintAll(); renderProfile();
     });
 
     if (fxChips) fxChips.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-fx]'); if (!btn) return;
       if (!user) user = {};
       user.profileEffect = btn.dataset.fx;
-      saveUser(); paintAll(); renderProfile(); syncProfileToCloud();
+      saveUser(); paintAll(); renderProfile();
     });
 
 
 
-    document.addEventListener('doro:premium-changed', paintAll);
     paintAll();
   })();
-  // ---------- СПИСОК ПОЛЬЗОВАТЕЛЕЙ В ПРОФИЛЕ ----------
-const profileUsersBody = $('profileUsersBody');
-const profileUsersCount = $('profileUsersCount');
-const profileUsersCountLabel = $('profileUsersCountLabel');
-
-  function getSectionAuthors() {
-    const set = new Set();
-    Object.values(subjects).forEach(s => {
-      if (s && s.author) set.add(s.author.trim());
-    });
-    return [...set];
-  }
-  const SECTION_AUTHORS = getSectionAuthors();
-  const SECTION_AUTHOR_FIRSTNAMES = SECTION_AUTHORS
-    .map(a => a.split(/\s+/)[0].toLowerCase());
-
-// Только для ключа слияния — не трогает отображение
-function normalizeUserName(name) {
-  return (name || '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .replace(/ë/g, 'е')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-// Для отображения — как есть, только с заглавной первой буквы
-function displayUserName(name) {
-  const n = (name || '').trim().replace(/\s+/g, ' ');
-  if (!n) return '';
-  return n.charAt(0).toUpperCase() + n.slice(1);
-}
-
-  // Кэш редакторов: только по uid
-  let EDITOR_UIDS = new Map();
-
-  async function loadEditorNames() {
-    try {
-      // Ждём, пока Firebase реально подключится (до 5 секунд)
-      let waitTime = 0;
-      while (!window.doroDb && waitTime < 5000) {
-        await new Promise(r => setTimeout(r, 100));
-        waitTime += 100;
-      }
-      
-      if (!window.doroDb) {
-        console.warn('[editors] Firebase не готов, роли не загружены');
-        return;
-      }
-
-      const { getDocs, collection } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-      const snap = await getDocs(collection(window.doroDb, 'roles'));
-      
-      EDITOR_UIDS.clear();
-      
-      snap.forEach(d => {
-        const data = d.data();
-        if (data.role === 'editor' || data.role === 'admin') {
-          EDITOR_UIDS.set(d.id, data.role);
-        }
-      });
-      
-      console.log('[editors] Роли успешно загружены. Найдено:', EDITOR_UIDS.size);
-      
-      // Если открыта вкладка пользователей — перерисовываем, чтобы бейджи появились
-      const isUsersPanelOpen = document.getElementById('panelUsers')?.classList.contains('is-open');
-      if (isUsersPanelOpen && typeof renderProfileUsers === 'function') {
-        renderProfileUsers(true); 
-      }
-      
-    } catch (e) { 
-      console.warn('[editors] Ошибка загрузки ролей:', e); 
-    }
-  }
-
-  // Возвращает 'admin', 'editor' или null — только по uid
-  function getAuthorRole(u) {
-    if (!u || !u.uid) return null;
-    return EDITOR_UIDS.get(u.uid) || null;
-  }
-
-  // Редактор — только если совпал uid
-  function isSectionAuthor(u) {
-    if (!u || !u.uid) return false;
-    return EDITOR_UIDS.has(u.uid);
-  }
-
-  function userKey(u) {
-    return normalizeUserName(u.name).toLowerCase() + '::' + (u.group || '').trim().toLowerCase();
-  }
-
-  function mergeUsers(list) {
-    const map = new Map();
-    list.forEach(u => {
-      const name = (u.name || '').trim().replace(/\s+/g, ' ');
-      if (!name) return;
-      const key = userKey({ name, group: u.group });
-      if (!map.has(key)) {
-        map.set(key, {
-          name,
-          group: (u.group || '').trim(),
-          status: u.status || '',
-          color: u.color || '#3b82f6',
-          avatarEmoji: u.avatarEmoji || '',
-          avatarFrame: u.avatarFrame || 'none',
-          profileBg: u.profileBg || 'default',
-          profileEffect: u.profileEffect || 'default',
-          profileBadge: u.profileBadge || 'none',
-          premiumActive: !!u.premiumActive,
-          premiumExpiresAt: u.premiumExpiresAt || 0,
-          uid: u.uid || null,
-          id: u.id || null,
-          uids: [u.id],
-          updatedAt: u.updatedAt || 0
-        });
-      } else {
-        const cur = map.get(key);
-        cur.uids.push(u.id);
-        if (u.uid && !cur.uid) cur.uid = u.uid;
-        if (u.id && !cur.id) cur.id = u.id;
-        if (u.status && (u.updatedAt || 0) >= cur.updatedAt) {
-          cur.status = u.status;
-          cur.updatedAt = u.updatedAt || 0;
-        }
-        if ((u.updatedAt || 0) >= cur.updatedAt) {
-          cur.color = u.color || cur.color;
-          cur.avatarEmoji   = u.avatarEmoji   || cur.avatarEmoji;
-          cur.avatarFrame   = u.avatarFrame   || cur.avatarFrame;
-          cur.profileBg     = u.profileBg     || cur.profileBg;
-          cur.profileEffect = u.profileEffect || cur.profileEffect;
-          cur.profileBadge  = u.profileBadge  || cur.profileBadge;
-          if (u.premiumActive !== undefined) {
-            cur.premiumActive = u.premiumActive;
-            cur.premiumExpiresAt = u.premiumExpiresAt || 0;
-          }
-        }
-      }
-    });
-    return [...map.values()];
-  }
-
-  function paintUserRow(u, opts) {
-    const honorAuthor = !!(opts && opts.honorAuthor);
-    const initial = u.name ? u.name[0].toUpperCase() : '?';
-    const color = u.color || '#3b82f6';
-    const isMe = !!(user && user.name
-      && user.name.toLowerCase() === u.name.toLowerCase()
-      && ((user.group || '').toLowerCase() === (u.group || '').toLowerCase()));
-    const isAuthor = honorAuthor && isSectionAuthor(u);
-
-    const row = document.createElement('div');
-    row.className = 'user-chip'
-      + (isMe ? ' user-chip--me' : '')
-      + (isAuthor ? ' user-chip--author' : '');
-    row.title = [u.name, u.group ? 'Группа ' + u.group : '', u.status || ''].filter(Boolean).join(' · ');
-
-    const badges = [];
-    if (isAuthor) badges.push('<span class="user-chip__badge user-chip__badge--author">редактор</span>');
-    if (isMe) badges.push('<span class="user-chip__badge user-chip__badge--me">вы</span>');
-
-    const emoji = u.avatarEmoji || '';
-    const avatarBg = emoji
-      ? `linear-gradient(135deg,
-           color-mix(in srgb, ${color} 18%, #ffffff),
-           color-mix(in srgb, ${color} 28%, #ffffff)
-         )`
-      : `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 55%, #fff))`;
-    const avatarContent = emoji || initial;
-    const avatarClass = 'user-chip__avatar' + (emoji ? ' is-emoji' : '');
-
-    row.innerHTML = `
-      <span class="${avatarClass}" style="background:${avatarBg}">${avatarContent}</span>
-      <span class="user-chip__name">${escapeHtml(displayUserName(u.name))}</span>
-      ${badges.join('')}
-    `;
-    return row;
-  }
-
-  // ---------- КЭШ ПОЛЬЗОВАТЕЛЕЙ ----------
-  const USERS_CACHE_KEY = 'doro.usersCache.v2'; // v2 — сбросит старый кэш на 200 записей
-  const USERS_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 дней
-  let usersFetching = false;
-
-  // Пытаемся загрузить кэш из localStorage при старте
-  let usersCache = null;
-  let usersCacheTime = 0;
-  (function initUsersCache() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(USERS_CACHE_KEY) || 'null');
-      if (raw && Array.isArray(raw.data) && raw.time) {
-        usersCache = raw.data;
-        usersCacheTime = raw.time;
-      }
-    } catch (e) { /* ignore */ }
-  })();
-
-  function saveUsersCacheToLS(data) {
-    try {
-      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify({ data, time: Date.now() }));
-    } catch (e) { /* ignore */ }
-  }
-
-  async function renderProfileUsers(force = false) {
-    if (!profileUsersBody) return;
-    const now = Date.now();
-
-    // Если есть свежий кэш — используем его и для числа, и для списка
-    if (!force && usersCache && (now - usersCacheTime) < USERS_CACHE_TTL) {
-      paintUsersList(usersCache);
-      return;
-    }
-
-    if (usersFetching) return;
-    usersFetching = true;
-
-    profileUsersBody.innerHTML = '<div class="profile-users__empty">Загрузка пользователей…</div>';
-
-    try {
-      if (!window.doroCloudReady) {
-        profileUsersBody.innerHTML = '<div class="profile-users__empty">Firebase недоступен.</div>';
-        return;
-      }
-      const cloud = await window.doroCloudReady;
-      if (!cloud || !cloud.listAllUsers) {
-        profileUsersBody.innerHTML = '<div class="profile-users__empty">Firebase не подключён.</div>';
-        return;
-      }
-
-      // Тянем всех (по 500 за раз, без ограничения в 700)
-      const allUsers = await cloud.listAllUsers(500);
-      usersCache = allUsers;
-      usersCacheTime = Date.now();
-      saveUsersCacheToLS(allUsers);
-
-      // Считаем уникальных людей (склеиваем дубли по name+group)
-      paintUsersList(allUsers);
-    } catch (err) {
-      console.error('renderProfileUsers error:', err);
-      profileUsersBody.innerHTML = '<div class="profile-users__empty">Ошибка загрузки.</div>';
-    } finally {
-      usersFetching = false;
-    }
-  }
-  // ---------- СПИСОК ЗАКРЫТЫХ ГРУПП ----------
-  // Просто напиши сюда нужные группы в кавычках (БОЛЬШИМИ БУКВАМИ, без пробелов)
-  const CLOSED_GROUPS = [
-    "ЛД2511",
-  ];
-
-  function isGroupFull(group) {
-    if (!group) return false;
-    return CLOSED_GROUPS.includes(group.trim().toUpperCase());
-  }
-
-  // Слот-машина: каждый разряд — свой барабан, крутится и останавливается
-  let _slotToken = 0;
-  let _lastUsersTotal = -1;
-
-  function setUsersHeroCountAnimated(groupStats) {
-    const numEl = document.getElementById('profileUsersCount');
-    const labelEl = document.getElementById('profileUsersCountLabel');
-    if (!numEl) return;
-
-    // Включаем режим счётчика на плитке (иконка уезжает, цифра приходит)
-    const tile = document.getElementById('tileUsers');
-    if (tile) tile.classList.add('has-count');
-
-    const total = groupStats.reduce((s, [, c]) => s + c, 0);
-
-    // склонение
-    if (labelEl) {
-      const m10 = total % 10, m100 = total % 100;
-      let word = 'человек';
-      if (m10 === 1 && m100 !== 11) word = 'человек';
-      else if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) word = 'человека';
-      labelEl.textContent = word;
-    }
-
-    // без изменений — без анимации
-    if (total === _lastUsersTotal) {
-      numEl.classList.remove('is-slots');
-      numEl.textContent = String(total);
-      return;
-    }
-    _lastUsersTotal = total;
-
-    // reduce-motion
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      numEl.classList.remove('is-slots');
-      numEl.textContent = String(total);
-      return;
-    }
-
-    const myToken = ++_slotToken;
-
-    // Разбиваем итог на цифры
-    const digits = String(total).split('');
-
-    // Собираем слоты
-    numEl.innerHTML = '';
-    numEl.classList.add('is-slots');
-
-    const reels = digits.map((targetDigit, i) => {
-      // обёртка (окошко)
-      const reel = document.createElement('span');
-      reel.className = 'profile-users__reel';
-
-      // столбик: 0..9 + повтор 0..9 для длинного прокрута
-      const strip = document.createElement('span');
-      strip.className = 'profile-users__reel-strip';
-
-      // 2 полных круга по 10 цифр = 20 цифр
-      for (let r = 0; r < 2; r++) {
-        for (let d = 0; d <= 9; d++) {
-          const item = document.createElement('span');
-          item.className = 'profile-users__reel-item';
-          item.textContent = String(d);
-          strip.appendChild(item);
-        }
-      }
-      // финальная нужная цифра — в конец (21-я позиция)
-      const finalItem = document.createElement('span');
-      finalItem.className = 'profile-users__reel-item';
-      finalItem.textContent = targetDigit;
-      strip.appendChild(finalItem);
-
-      reel.appendChild(strip);
-      numEl.appendChild(reel);
-      return { reel, strip, index: i, target: Number(targetDigit) };
-    });
-
-    // Ставим прокрутку: каждая цифра начинается с 0 (сразу видно «0»)
-    // и должна доехать до индекса последнего элемента (20).
-    // Позиция элемента: -index * 1em (высота одного окошка = 1em).
-    const STEP_PX_PER_EM = 1; // em
-    const totalItems = 21;    // 20 из повторяющихся + 1 финальная
-
-    // Все барабаны крутятся, но останавливаются по очереди:
-    // задержка растёт с i: 0, 220ms, 440ms, ...
-    reels.forEach(({ strip, index }) => {
-      // финальное смещение — к последнему элементу
-      const finalOffsetEm = -(totalItems - 1);
-
-      // стартовая позиция — верх (0)
-      strip.style.transform = 'translateY(0)';
-
-      // задержка остановки: чем правей барабан — тем позже
-      const stopDelay = index * 220;
-
-      // длительность прокрутки (перед остановкой) — общая,
-      // но каждая «докручивается» в свой момент за счёт transition-delay
-      const spinDuration = 900 + index * 40; // ms
-
-      // Триггерим анимацию:
-      // 1) лёгкий старт (translateY 0)
-      // 2) через requestAnimationFrame — плавный уход к финалу
-      requestAnimationFrame(() => {
-        strip.style.transition = `transform ${spinDuration}ms cubic-bezier(0.12, 0.8, 0.2, 1) ${stopDelay}ms`;
-        strip.style.transform = `translateY(${finalOffsetEm}em)`;
-      });
-    });
-
-    // Финальный «щёлк» всего блока — после последней остановки
-    const lastDelay = (reels.length - 1) * 220;
-    const lastDuration = 900 + (reels.length - 1) * 40;
-    const finishTime = lastDelay + lastDuration;
-
-    setTimeout(() => {
-      if (myToken !== _slotToken) return;
-      numEl.classList.add('is-landed');
-      setTimeout(() => numEl.classList.remove('is-landed'), 500);
-    }, finishTime);
-  }
-
-  // Отдельная функция отрисовки (без запроса)
-  function paintUsersList(allUsers) {
-    const merged = mergeUsers(allUsers);
-
-    if (!merged.length) {
-      setUsersHeroCount(0);
-      return;
-    }
-
-    // Группируем по группам
-    const groups = new Map();
-    merged.forEach(u => {
-      const g = u.group || '';
-      if (!groups.has(g)) groups.set(g, []);
-      groups.get(g).push(u);
-    });
-    // Своя группа — всегда первая. Дальше — по количеству человек
-    // (по убыванию), при равенстве — по алфавиту. «Без группы» — в конце.
-    const myGroupKey = (user && user.group) ? user.group.trim().toUpperCase() : '';
-    const sortedGroups = [...groups.keys()].sort((a, b) => {
-      const aKey = (a || '').trim().toUpperCase();
-      const bKey = (b || '').trim().toUpperCase();
-
-      // 1. Своя группа — всегда сверху
-      const aMine = !!myGroupKey && aKey === myGroupKey;
-      const bMine = !!myGroupKey && bKey === myGroupKey;
-      if (aMine !== bMine) return aMine ? -1 : 1;
-
-      // 2. «Без группы» — в конце
-      if (!a && b) return 1;
-      if (a && !b) return -1;
-
-      // 3. По количеству человек — по убыванию
-      const diff = groups.get(b).length - groups.get(a).length;
-      if (diff !== 0) return diff;
-
-      // 4. По алфавиту
-      return a.localeCompare(b, 'ru');
-    });
-
-      setUsersHeroCountAnimated(
-        sortedGroups.map(g => [g, groups.get(g).length])
-      );
-
-    const myGroup = (user && user.group) ? user.group.trim().toUpperCase() : '';
-
-    profileUsersBody.innerHTML = '';
-
-    // надпись про сортировку — в начало тела панели, по центру
-    const oldNote = profileUsersBody.querySelector('.users-sort-note');
-    if (oldNote) oldNote.remove();
-    const sortNote = document.createElement('div');
-    sortNote.className = 'users-sort-note users-sort-note--hero';
-    sortNote.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <polyline points="19 12 12 19 5 12"></polyline>
-      </svg>
-      <span>Сортировка по количеству человек в группе — от больших к меньшим</span>
-    `;
-    profileUsersBody.appendChild(sortNote);
-
-    const grid = document.createElement('div');
-    grid.className = 'users-cards-grid';
-
-    sortedGroups.forEach(g => {
-      const list = groups.get(g);
-      if (!list.length) return;
-
-      const groupFull = isGroupFull(g);
-      const hasSchedule = g && window.SCHEDULES && window.SCHEDULES[g.toUpperCase()];
-      const isMyGroup = !!myGroup && g.trim().toUpperCase() === myGroup;
-
-      const card = document.createElement('div');
-      card.className = 'users-group-card'
-        + (groupFull ? ' users-group-card--full' : '')
-        + (isMyGroup ? ' users-group-card--mine' : '');
-
-      // клик по карточке группы — открыть расписание (если есть)
-      if (hasSchedule) {
-        card.style.cursor = 'pointer';
-        card.addEventListener('click', (e) => {
-          // если клик пришёлся по кнопке/ссылке внутри — не перехватываем
-          if (e.target.closest('button, a')) return;
-          setViewAsGroup(g);
-          setActivePanel(null);
-          showView('home');
-          updateViewAsBanner();
-          window.__refreshSchedule();
-        });
-      }
-
-      // Шапка карточки — название группы
-      const header = document.createElement('div');
-      header.className = 'users-group-card__head';
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'users-group-card__name';
-      nameEl.textContent = g || 'Без группы';
-      header.appendChild(nameEl);
-
-      // Количество человек — в том же ряду, справа от названия
-      if (g) {
-        const cnt = list.length;
-        const m10 = cnt % 10, m100 = cnt % 100;
-        let pWord = 'человек';
-        if (m10 === 1 && m100 !== 11) pWord = 'человек';
-        else if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) pWord = 'человека';
-        const countEl = document.createElement('span');
-        countEl.className = 'users-group-card__count';
-        countEl.textContent = `${cnt} ${pWord}`;
-        header.appendChild(countEl);
-      }
-
-      card.appendChild(header);
-
-      // ----- Система тегов под названием группы -----
-      const tagsBar = document.createElement('div');
-      tagsBar.className = 'users-group-card__badges';
-
-      // 1. Полная группа
-      if (groupFull) {
-        const t = document.createElement('span');
-        t.className = 'group-tag group-tag--full';
-        t.textContent = 'полная';
-        tagsBar.appendChild(t);
-      }
-      // 2. Количество человек — теперь в шапке рядом с названием (см. выше)
-
-      // 3. «Самая большая» — реально самая большая по количеству (не просто первая в списке)
-      const maxCount = Math.max(...[...groups.values()].map(arr => arr.length));
-      const isBiggest = groups.get(g).length === maxCount && groups.get(g).length > 1;
-      if (isBiggest) {
-        const t = document.createElement('span');
-        t.className = 'group-tag group-tag--top';
-        t.innerHTML = `
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-            <path d="M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.9L2 9.3l7.1-.4L12 2z"/>
-          </svg>
-          <span>самая большая</span>
-        `;
-        tagsBar.appendChild(t);
-      }
-
-      // 4. «Ваша группа»
-      if (isMyGroup) {
-        const t = document.createElement('span');
-        t.className = 'group-tag group-tag--mine';
-        t.textContent = 'ваша группа';
-        tagsBar.appendChild(t);
-      }
-
-      // 5. «Своё расписание» — кликабельный тег
-      if (hasSchedule) {
-        const t = document.createElement('button');
-        t.type = 'button';
-        t.className = 'group-tag group-tag--schedule';
-        t.innerHTML = `
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-          </svg>
-          <span>своё расписание</span>
-        `;
-        t.title = 'Открыть расписание группы ' + g;
-        t.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setViewAsGroup(g);
-          setActivePanel(null);
-          showView('home');
-          updateViewAsBanner();
-          window.__refreshSchedule();
-        });
-        tagsBar.appendChild(t);
-      }
-
-      // 6. «Редактор» — если в группе есть автор раздела (со значком)
-      const hasAuthor = list.some(u => isSectionAuthor(u));
-      if (hasAuthor) {
-        const t = document.createElement('span');
-        t.className = 'group-tag group-tag--author';
-        t.innerHTML = `
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-          </svg>
-          <span>есть редактор</span>
-        `;
-        tagsBar.appendChild(t);
-      }
-
-      if (tagsBar.children.length) {
-        card.appendChild(tagsBar);
-      }
-
-      // Тэги пользователей
-      const tagsWrap = document.createElement('div');
-      tagsWrap.className = 'users-group-card__tags';
-
-      list
-        .sort((a, b) => {
-          const aAuth = isSectionAuthor(a) ? 0 : 1;
-          const bAuth = isSectionAuthor(b) ? 0 : 1;
-          if (aAuth !== bAuth) return aAuth - bAuth;
-          return a.name.localeCompare(b.name, 'ru');
-        })
-        .forEach(u => {
-          const isMe = !!(user && user.name
-            && user.name.toLowerCase() === u.name.toLowerCase()
-            && ((user.group || '').toLowerCase() === (u.group || '').toLowerCase()));
-          const authorRole = getAuthorRole(u); // 'admin' | 'editor' | null
-          const isAuthor = !!authorRole;
-          const initial = u.name ? u.name[0].toUpperCase() : '?';
-          const color = u.color || '#3b82f6';
-          const emoji = u.avatarEmoji || '';
-
-          // Фон аватарки: яркий для буквы, пастельный для эмодзи
-          const avatarBg = emoji
-            ? `linear-gradient(135deg,
-                 color-mix(in srgb, ${color} 18%, #ffffff),
-                 color-mix(in srgb, ${color} 28%, #ffffff)
-               )`
-            : `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 55%, #fff))`;
-          const avatarContent = emoji || initial;
-          const avatarClass = 'users-group-card__avatar' + (emoji ? ' is-emoji' : '');
-
-          const tag = document.createElement('span');
-          tag.className = 'users-group-card__tag'
-            + (isMe ? ' users-group-card__tag--me' : '')
-            + (isAuthor ? ' users-group-card__tag--author' : '');
-          tag.title = [u.name, u.status || ''].filter(Boolean).join(' · ');
-
-          // данные для ховер-попапа
-          tag.dataset.previewUser = JSON.stringify({
-            name: u.name,
-            group: u.group || '',
-            status: u.status || '',
-            color: u.color || '#3b82f6',
-            avatarEmoji: u.avatarEmoji || '',
-            avatarFrame: u.avatarFrame || 'none',
-            profileBg: u.profileBg || 'default',
-            profileEffect: u.profileEffect || 'default',
-            profileBadge: u.profileBadge || 'none'
-          });
-
-          // ★ Премиум-статус из базы (устаревание проверяем тут же)
-          const premActive = !!u.premiumActive
-            && (!u.premiumExpiresAt || u.premiumExpiresAt > Date.now());
-
-          const badges = [];
-          if (authorRole === 'admin') badges.push('<span class="users-group-card__badge users-group-card__badge--admin">админ</span>');
-          else if (authorRole === 'editor') badges.push('<span class="users-group-card__badge users-group-card__badge--author">ред.</span>');
-          if (isMe) badges.push('<span class="users-group-card__badge users-group-card__badge--me">вы</span>');
-
-          const goldenStar = premActive
-            ? `<span class="users-group-card__star" title="Golden" aria-label="Golden">★</span>`
-            : '';
-
-          tag.innerHTML = `
-            <span class="${avatarClass}" style="background:${avatarBg}">${avatarContent}</span>
-            <span class="users-group-card__tag-name">${escapeHtml(displayUserName(u.name))}${goldenStar}</span>
-            ${badges.join('')}
-          `;
-          tagsWrap.appendChild(tag);
-        });
-
-      card.appendChild(tagsWrap);
-      grid.appendChild(card);
-    });
-
-    profileUsersBody.appendChild(grid);
-    layoutUsersMasonry(grid);
-  }
-
-  // ============================================================
-  //  MASONRY ПО ВЫСОТЕ: раскладываем карточки в колонки
-  //  по наименьшей текущей высоте — без рядов, плотно, по размеру.
-  // ============================================================
-  function layoutUsersMasonry(grid) {
-    if (!grid) return;
-    const cards = Array.from(grid.children);
-    if (!cards.length) return;
-
-    // Сбрасываем предыдущую раскладку
-    grid.style.position = 'relative';
-    cards.forEach(c => {
-      c.style.position = '';
-      c.style.left = '';
-      c.style.top = '';
-      c.style.width = '';
-    });
-
-    const containerWidth = grid.clientWidth;
-    if (containerWidth <= 0) return;
-
-    // Определяем колонки: на ПК — 3, планшет — 2, телефон — 1
-    const isMobile = window.matchMedia('(max-width: 640px)').matches;
-    const isTablet = window.matchMedia('(max-width: 860px)').matches;
-    let columns = 3;
-    if (isMobile) columns = 1;
-    else if (isTablet) columns = 2;
-
-    // Ширина колонки и отступ (совпадает с gap)
-    const gap = isMobile ? 8 : (isTablet ? 10 : 12);
-    const colWidth = (containerWidth - gap * (columns - 1)) / columns;
-
-    // Ставим всем карточкам одинаковую ширину, чтобы masonry был ровным
-    cards.forEach(c => { c.style.width = colWidth + 'px'; });
-
-    // Массив текущих высот колонок
-    const colHeights = new Array(columns).fill(0);
-
-    // Для каждой карточки: меряем высоту, ставим в самую низкую колонку
-    cards.forEach(card => {
-      // временно: absolute, чтобы измерить натуральную высоту
-      card.style.position = 'absolute';
-      card.style.width = colWidth + 'px';
-      const h = card.offsetHeight;
-
-      // находим самую низкую колонку
-      let minIdx = 0;
-      for (let i = 1; i < columns; i++) {
-        if (colHeights[i] < colHeights[minIdx]) minIdx = i;
-      }
-
-      const x = minIdx * (colWidth + gap);
-      const y = colHeights[minIdx];
-
-      card.style.left = x + 'px';
-      card.style.top = y + 'px';
-
-      colHeights[minIdx] = y + h + gap;
-    });
-
-    // Высота контейнера — максимальная колонка
-    const maxH = Math.max(...colHeights) - gap;
-    grid.style.height = Math.max(0, maxH) + 'px';
-    grid.style.display = 'block';
-  }
-
-  // Пересчитываем masonry при ресайзе
-  let _masonryResizeTimer = null;
-  window.addEventListener('resize', () => {
-    clearTimeout(_masonryResizeTimer);
-    _masonryResizeTimer = setTimeout(() => {
-      const grid = document.querySelector('.users-cards-grid');
-      if (grid && grid.children.length) layoutUsersMasonry(grid);
-    }, 150);
-  });
   // ---------- Управление плитками и панелями ----------
-  const tileUsers     = $('tileUsers');
   const tileLectures  = $('tileLectures');
   const tileEditProfile = $('tileEditProfile');
-  const panelUsers    = $('panelUsers');
   const panelLectures = $('panelLectures');
   let activePanel = null;
 
@@ -3150,65 +2221,18 @@ function displayUserName(name) {
     });
   }
 
-  // Переключатель для старых панелей (users / lectures)
   function setActivePanel(which) {
     activePanel = which;
-
-    [panelUsers, panelLectures].forEach(p => {
-      if (!p) return;
-      p.classList.remove('is-open');
-      p.setAttribute('aria-hidden', 'true');
-    });
-    [tileUsers, tileLectures].forEach(t => {
-      if (!t) return;
-      t.classList.remove('is-active');
-      t.setAttribute('aria-expanded', 'false');
-    });
-
-    if (!which) return;
-
-    const panel = which === 'users' ? panelUsers
-                : which === 'lectures' ? panelLectures : null;
-    const tile  = which === 'users' ? tileUsers
-                : which === 'lectures' ? tileLectures : null;
-    if (panel) { panel.classList.add('is-open'); panel.setAttribute('aria-hidden', 'false'); }
-    if (tile)  { tile.classList.add('is-active'); tile.setAttribute('aria-expanded', 'true'); }
-
-    if (which === 'users') renderProfileUsers();
-    if (which === 'lectures') renderLectureInfo();
-  }
-  const NEW_USERS_KEY = 'doro.newUsersV1'; // поменяй на V2, чтобы снова «подсветить» плитку
-  function paintUsersNew() {
-    if (!tileUsers) return;
-    const isNew = localStorage.getItem(NEW_USERS_KEY) !== 'seen';
-    tileUsers.classList.toggle('profile-tile--new', isNew);
-  }
-  paintUsersNew();
-
-  if (tileUsers) {
-    tileUsers.addEventListener('click', () => {
-      setActivePanel(activePanel === 'users' ? null : 'users');
-      if (localStorage.getItem(NEW_USERS_KEY) !== 'seen') {
-        localStorage.setItem(NEW_USERS_KEY, 'seen');
-        paintUsersNew();
-      }
-    });
-  }
-    // Кнопка «Обновить» в панели пользователей
-  const usersRefreshBtn = $('usersRefreshBtn');
-  if (usersRefreshBtn) {
-    usersRefreshBtn.addEventListener('click', async () => {
-      usersRefreshBtn.style.opacity = '0.4';
-      usersRefreshBtn.style.pointerEvents = 'none';
-      usersCache = null;
-      usersCacheTime = 0;
-      try { localStorage.removeItem(USERS_CACHE_KEY); } catch (e) {}
-      await renderProfileUsers(true);
-      setTimeout(() => {
-        usersRefreshBtn.style.opacity = '';
-        usersRefreshBtn.style.pointerEvents = '';
-      }, 500);
-    });
+    const open = which === 'lectures';
+    if (panelLectures) {
+      panelLectures.classList.toggle('is-open', open);
+      panelLectures.setAttribute('aria-hidden', String(!open));
+    }
+    if (tileLectures) {
+      tileLectures.classList.toggle('is-active', open);
+      tileLectures.setAttribute('aria-expanded', String(open));
+    }
+    if (open) renderLectureInfo();
   }
   if (tileLectures) {
     tileLectures.addEventListener('click', () => {
@@ -3313,15 +2337,28 @@ function displayUserName(name) {
   window.__refreshSchedule = function () {
     renderCalendar();
     if (rendered.home) updateTodayView();
-    if (rendered.premium) renderPremiumPage();
+    if (rendered.premium) renderPracticePage();
     if (activePanel === 'lectures') renderLectureInfo();
   };
 
-  // ---------- Просмотр чужого расписания ----------
+  const scheduleGroupPreview = $('scheduleGroupPreview');
+  if (scheduleGroupPreview) {
+    scheduleGroupPreview.add(new Option('Моя группа', ''));
+    for (const group of Object.keys(window.SCHEDULES || {}).sort()) {
+      scheduleGroupPreview.add(new Option(group, group));
+    }
+    scheduleGroupPreview.addEventListener('change', () => {
+      setViewAsGroup(scheduleGroupPreview.value);
+      updateViewAsBanner();
+      window.__refreshSchedule();
+    });
+  }
+
   function updateViewAsBanner() {
     const banner = $('viewAsBanner');
     const nameEl = $('viewAsGroupName');
     const g = getViewAsGroup();
+    if (scheduleGroupPreview) scheduleGroupPreview.value = g || '';
     if (!banner) return;
     if (g) {
       if (nameEl) nameEl.textContent = g;
@@ -3713,8 +2750,6 @@ function displayUserName(name) {
       `;
       readerTabs = $('readerTabs');
 
-      // Кнопка «Скачать PDF» — только для Golden
-      if (window.doroPremium && window.doroPremium.isPremiumActive()) {
         const dlBtn = document.createElement('button');
         dlBtn.type = 'button';
         dlBtn.className = 'reader-pdf-btn';
@@ -3729,7 +2764,6 @@ function displayUserName(name) {
         `;
         dlBtn.addEventListener('click', () => downloadTopicAsPdf());
         readerArticle.querySelector('.reader__num').appendChild(dlBtn);
-      }
 
       // --- Сложность темы ---
       const raw = await loadTopicContent(t);
@@ -3772,13 +2806,10 @@ function displayUserName(name) {
 
     let tabConfigForRender = Array.isArray(t.tabs) ? t.tabs : (Array.isArray(subject.tabs) ? subject.tabs : []);
 
-    // Если в заголовке темы есть слово «Коллоквиум» — принудительно убираем вкладки тестов
-    const isColloquium = /коллоквиум/i.test(t.title);
-
-    // Вкладка «Тесты» показывается только если в файле реально есть тесты и это не коллоквиум
+    // Вкладка «Тесты» показывается только если в файле реально есть тесты
     if (tabConfigForRender.includes('tests')) {
       const hasTests = parseTestsToQuestions(raw).length > 0;
-      if (!hasTests || isColloquium) {
+      if (!hasTests) {
         tabConfigForRender = tabConfigForRender.filter(tab => tab !== 'tests');
       }
     }
@@ -3900,10 +2931,9 @@ function displayUserName(name) {
   }
 
   // ============================================================
-  //  СКАЧИВАНИЕ ТЕМЫ В PDF (только Golden)
+  //  СКАЧИВАНИЕ ТЕМЫ В PDF
   // ============================================================
   function downloadTopicAsPdf() {
-    if (!window.doroPremium || !window.doroPremium.isPremiumActive()) return;
     if (!window.currentTopicMeta || !window.currentSubjectKey) return;
 
     const subject = window.subjects[window.currentSubjectKey];
@@ -4087,10 +3117,10 @@ function displayUserName(name) {
       ${author ? `<span class="pdf-author">made by ${escapeHtml(author)}</span>` : ''}
     </div>
     <h1 class="pdf-title">${escapeHtml(title)}</h1>
-    <div class="pdf-meta">${escapeHtml(subject.title)} · ${dateStr} · doro Golden</div>
+    <div class="pdf-meta">${escapeHtml(subject.title)} · ${dateStr} · doro</div>
   </div>
   <div class="pdf-body">${clone.innerHTML}</div>
-  <div class="pdf-foot">doro · Golden · ${escapeHtml(subject.title)}</div>
+  <div class="pdf-foot">doro · ${escapeHtml(subject.title)}</div>
 </body>
 </html>`;
 
@@ -4144,83 +3174,13 @@ function displayUserName(name) {
       if (f) f.remove();
     }, 120000);
   }
-// Приветствия для активного Golden
-function getGoldenGreeting(name) {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const list = isDark
-    ? [
-        `${escapeHtml(name)}, ты в потоке.`,
-        `О, ${escapeHtml(name)}. Золотой час.`,
-        `${escapeHtml(name)}, держим темп.`,
-        `С возвращением, ${escapeHtml(name)}.`,
-        `${escapeHtml(name)}, Golden на связи.`
-      ]
-    : [
-        `Привет, ${escapeHtml(name)}.`,
-        `Рады видеть, ${escapeHtml(name)}.`,
-        `${escapeHtml(name)}, всё на месте.`,
-        `С возвращением, ${escapeHtml(name)}.`,
-        `${escapeHtml(name)}, Golden с тобой.`
-      ];
-  // кэш на сессию — чтобы не мигало при перерисовке
-  if (!window.__goldenGreetCache) window.__goldenGreetCache = {};
-  const key = isDark ? 'dark' : 'light';
-  if (!window.__goldenGreetCache[key]) {
-    window.__goldenGreetCache[key] = list[Math.floor(Math.random() * list.length)];
-  }
-  return window.__goldenGreetCache[key];
-}
-
-function getGoldenSubtitle(name, days) {
-  if (days <= 3) return 'Совсем немного осталось — продли, чтобы не потерять доступ.';
-  if (days <= 7) return 'Неделя — ещё норм. Но лучше продлить заранее.';
-  if (days <= 14) return 'Половина пути. Всё под контролем.';
-  return 'Всё под контролем. Продолжаем в том же духе.';
-}
-  function renderPremiumPage() {
-    const view = document.getElementById('view-premium');
-    if (!view || !window.doroPremium) return;
-
-    const active = window.doroPremium.isPremiumActive();
-    const days = window.doroPremium.daysLeft();
-    const price = window.doroPremium.PRICE_RUB;
-    const name = (user && user.name) || 'друг';
-
-    if (active) {
-      // ---------- АКТИВНЫЙ GOLDEN ----------
-      view.innerHTML = `
-        <div class="golden-page golden-page--active">
-          <div class="golden-active-hero">
-            <div class="golden-active-hero__top">
-              <span class="golden-wordmark golden-wordmark--sm" aria-hidden="true">Golden</span>
-              <span class="golden-active-hero__badge">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.9L2 9.3l7.1-.4L12 2z"/>
-                </svg>
-                активен
-              </span>
-            </div>
-
-            <h1 class="golden-active-hero__title">
-              ${getGoldenGreeting(name)}
-            </h1>
-            <p class="golden-active-hero__sub">
-              ${getGoldenSubtitle(name, days)}
-            </p>
-
-            <div class="golden-active-days">
-              <span class="golden-active-days__label">Осталось</span>
-              <div class="golden-active-days__num-block">
-                <span class="golden-active-days__num" id="goldenDaysNum">${days}</span>
-                <span class="golden-active-days__word" id="goldenDaysWord">${pluralDays(days, 'день', 'дня', 'дней')}</span>
-              </div>
-              <div class="golden-active-days__bar">
-                <span class="golden-active-days__fill" style="width:${Math.max(0, Math.min(100, Math.round((days / 30) * 100)))}%"></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="golden-active-body">
+  function renderPracticePage() {
+    const view = views.premium;
+    if (!view) return;
+    view.innerHTML = `
+      <div class="golden-page golden-page--active">
+        <div class="golden-active-body">
+          <h1>Практика</h1>
             <div class="golden-tabs" role="tablist">
               <button type="button" class="golden-tabs__btn is-active" data-golden-tab="quizzes" role="tab" aria-selected="true">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -4233,86 +3193,8 @@ function getGoldenSubtitle(name, days) {
             </div>
 
             <div class="golden-panel" id="premiumPanel"></div>
-
-            <div class="golden-perks">
-              <div class="golden-perks__head">
-                <span class="golden-perks__title">Что у тебя есть</span>
-                <span class="golden-perks__hint">нажми, чтобы перейти</span>
-              </div>
-
-              <div class="golden-perks__grid">
-                <button type="button" class="golden-perk" data-perk-go="quizzes">
-                  <span class="golden-perk__icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                  </span>
-                  <span class="golden-perk__body">
-                    <b>Ошибки в тестах</b>
-                    <span>Всё, где споткнулся — в одном месте</span>
-                  </span>
-                  <span class="golden-perk__arrow" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  </span>
-                </button>
-
-                <button type="button" class="golden-perk" data-perk-go="cards">
-                  <span class="golden-perk__icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="16" height="12" rx="2"></rect><path d="M22 8v8"></path><line x1="6" y1="12" x2="14" y2="12"></line></svg>
-                  </span>
-                  <span class="golden-perk__body">
-                    <b>Карточки к коллоквиуму</b>
-                    <span>Вопрос → ответ, листаешь в маршрутке</span>
-                  </span>
-                  <span class="golden-perk__arrow" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  </span>
-                </button>
-
-                <button type="button" class="golden-perk" data-perk-go="pdf">
-                  <span class="golden-perk__icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M12 18v-6"></path><polyline points="9 15 12 18 15 15"></polyline></svg>
-                  </span>
-                  <span class="golden-perk__body">
-                    <b>Скачать тему в PDF</b>
-                    <span>Кнопка в шапке любой темы</span>
-                  </span>
-                  <span class="golden-perk__arrow" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  </span>
-                </button>
-
-                <button type="button" class="golden-perk" data-perk-go="profile">
-                  <span class="golden-perk__icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2"></path><path d="M16.5 8.5l1.5-1.5"></path></svg>
-                  </span>
-                  <span class="golden-perk__body">
-                    <b>Оформление профиля</b>
-                    <span>Смайлик, рамки, фоны, бейдж</span>
-                  </span>
-                  <span class="golden-perk__arrow" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  </span>
-                </button>
-
-                <button type="button" class="golden-perk" data-perk-go="tests">
-                  <span class="golden-perk__icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-                  </span>
-                  <span class="golden-perk__body">
-                    <b>Тесты без лимита</b>
-                    <span>Сколько нужно — столько и решай</span>
-                  </span>
-                  <span class="golden-perk__arrow" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <button type="button" class="golden-manage" id="premiumManageBtn">Управление подпиской</button>
-          </div>
         </div>
-      `;
-
+      </div>`;
       const tabs = view.querySelectorAll('[data-golden-tab]');
       function activateTab(tab) {
         tabs.forEach(b => {
@@ -4323,176 +3205,7 @@ function getGoldenSubtitle(name, days) {
         renderGoldenTabContent(tab);
       }
       tabs.forEach(b => b.addEventListener('click', () => activateTab(b.dataset.goldenTab)));
-
-      view.querySelectorAll('[data-perk-go]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const go = btn.dataset.perkGo;
-          if (go === 'quizzes' || go === 'cards') {
-            activateTab(go);
-            const panel = view.querySelector('#premiumPanel');
-            if (panel) {
-              panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              panel.classList.add('is-pulsed');
-              setTimeout(() => panel.classList.remove('is-pulsed'), 800);
-            }
-            return;
-          }
-          if (go === 'profile') {
-            const tile = document.getElementById('tileEditProfile');
-            if (tile) tile.click();
-            else if (typeof window.__openProfileSheet === 'function') window.__openProfileSheet();
-            return;
-          }
-          if (go === 'pdf' || go === 'tests') {
-            const navLink = document.querySelector('.nav a[data-view="files"]');
-            if (navLink) navLink.click();
-            return;
-          }
-        });
-      });
-
-      const manage = view.querySelector('#premiumManageBtn');
-      if (manage) manage.addEventListener('click', () => {
-        const ok = confirm('Отключить Golden? Все функции станут недоступны.');
-        if (ok) { window.doroPremium.deactivatePremium(); renderPremiumPage(); }
-      });
-
-      // Первый таб — Ошибки
-      renderGoldenTabContent('quizzes');
-      return;
-    }
-
-    // ---------- ВИТРИНА ДЛЯ БЕСПЛАТНЫХ ----------
-    view.innerHTML = `
-      <div class="golden-page golden-page--showcase">
-        <div class="golden-hero">
-          <span class="golden-wordmark golden-wordmark--big" aria-hidden="true">Golden</span>
-          <h1 class="golden-title">Учись как в последний раз.<br>Отдыхай как в первый.</h1>
-          <p class="golden-sub">doro держит ритм, пока ты держишь голову. Всё, что нужно для пар — в одном месте, без суеты и лишних вкладок.</p>
-          <button type="button" class="golden-price" id="goldenPriceBtn" aria-label="Перейти к оформлению Golden">
-            <span class="golden-price__num">${price}</span>
-            <span class="golden-price__cur">₽ / месяц</span>
-            <span class="golden-price__tag">дешевле кофе</span>
-          </button>
-        </div>
-
-        <!-- ГЛАВНОЕ: PDF + ОФЛАЙН -->
-        <div class="golden-main-benefit">
-          <div class="golden-main-benefit__badge">Главное</div>
-          <div class="golden-main-benefit__icon" aria-hidden="true">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <path d="M12 18v-6"></path>
-              <polyline points="9 15 12 18 15 15"></polyline>
-            </svg>
-          </div>
-          <div class="golden-main-benefit__body">
-            <h3 class="golden-main-benefit__title">Скачай тему — и читай без интернета</h3>
-            <p class="golden-main-benefit__text">
-              Одна кнопка — и тема превращается в аккуратный PDF. В метро,
-              в поезде, в очереди — читаешь с телефона, ничего не грузится.
-            </p>
-            <div class="golden-main-benefit__points">
-              <span class="golden-main-benefit__point">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Тема целиком — с таблицами и подсветкой
-              </span>
-              <span class="golden-main-benefit__point">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Файл остаётся навсегда
-              </span>
-              <span class="golden-main-benefit__point">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Отправь другу в мессенджер
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Остальные функции -->
-        <ul class="golden-other-benefits">
-          <li class="golden-other-benefit">
-            <span class="golden-other-benefit__icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="8" r="4"></circle>
-                <path d="M4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2"></path>
-                <path d="M16.5 8.5l1.5-1.5"></path>
-              </svg>
-            </span>
-            <span class="golden-other-benefit__body">
-              <b>Сделай профиль своим</b>
-              <span>Смайлик-аватарка, рамки, фоны, бейдж рядом с именем — и тебя запоминают.</span>
-            </span>
-          </li>
-          <li class="golden-other-benefit">
-            <span class="golden-other-benefit__icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                <line x1="12" y1="2" x2="12" y2="12"></line>
-              </svg>
-            </span>
-            <span class="golden-other-benefit__body">
-              <b>Тесты без лимита</b>
-              <span>На бесплатном — ${window.doroPremium.QUIZ_LIMIT_FREE} попыток. С Golden — сколько нужно.</span>
-            </span>
-          </li>
-          <li class="golden-other-benefit">
-            <span class="golden-other-benefit__icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-            </span>
-            <span class="golden-other-benefit__body">
-              <b>Список ошибок</b>
-              <span>Всё, где споткнулся — в одном месте, перед коллоквиумом.</span>
-            </span>
-          </li>
-          <li class="golden-other-benefit">
-            <span class="golden-other-benefit__icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="6" width="16" height="12" rx="2"></rect>
-                <path d="M22 8v8"></path>
-                <line x1="6" y1="12" x2="14" y2="12"></line>
-              </svg>
-            </span>
-            <span class="golden-other-benefit__body">
-              <b>Карточки к коллоквиуму</b>
-              <span>Вопрос → ответ. Листаешь в маршрутке — к паре помнишь.</span>
-            </span>
-          </li>
-        </ul>
-
-        <button type="button" class="golden-activate" id="premiumActivateBtn">
-          Забрать Golden · ${price} ₽/мес
-        </button>
-        <p class="golden-fine">Отмена в один клик. Без автосписаний без предупреждения.</p>
-      </div>
-    `;
-
-    const activateBtn = view.querySelector('#premiumActivateBtn');
-    if (activateBtn) {
-      activateBtn.id = 'premiumActivateBtn';
-      activateBtn.addEventListener('click', () => {
-        if (typeof window.__openPayModal === 'function') {
-          window.__openPayModal();
-        } else {
-          alert('Окно оплаты не загрузилось. Обнови страницу.');
-        }
-      });
-    }
-
-    // Клик по цене → плавный скролл к кнопке + подсветка
-    const priceBtn = view.querySelector('#goldenPriceBtn');
-    if (priceBtn) {
-      priceBtn.addEventListener('click', () => {
-        if (typeof window.__openPayModal === 'function') {
-          window.__openPayModal();
-        }
-      });
-    }
+    activateTab('quizzes');
   }
 function pluralTopicsCount(n) {
   const m10 = n % 10, m100 = n % 100;
@@ -5324,11 +4037,11 @@ function renderFlashDeck(deckEl) {
     if (!rendered[name]) {
       if (name === 'home') { renderCalendar(); updateTodayView(); }
       if (name === 'files') renderSections();
-      if (name === 'premium') renderPremiumPage();
+      if (name === 'premium') renderPracticePage();
       rendered[name] = true;
     } else if (name === 'premium') {
-      // Премиум перерисовываем всегда — состояние могло измениться
-      renderPremiumPage();
+      // Обновляем историю после прохождения теста.
+      renderPracticePage();
     }
     window.scrollTo({ top: 0 });
   }
@@ -5951,103 +4664,6 @@ function renderPreparations(preparations, tasks) {
     if (Number.isFinite(idx) && idx >= 1 && idx <= files.length) window.open(files[idx - 1], '_blank', 'noopener');
   }
 
-  // ---------- ЗАЩИТА ОТ КОПИРОВАНИЯ ----------
-  const MAX_LINES = 15;
-  let copyToastTimer = null, selectionGuardLock = false;
-  function isMobileReader() { return window.innerWidth <= 860; }
-  function showCopyToast(msg) {
-    let toast = $('copyToast');
-    if (!toast) { toast = document.createElement('div'); toast.id = 'copyToast'; toast.className = 'copy-toast'; document.body.appendChild(toast); }
-    toast.textContent = msg; toast.classList.add('is-visible');
-    clearTimeout(copyToastTimer);
-    copyToastTimer = setTimeout(() => toast.classList.remove('is-visible'), 1800);
-  }
-  function isInsideReader(el) {
-    if (!el) return false;
-    const node = el.nodeType === 1 ? el : el.parentElement;
-    return !!(node && node.closest && node.closest('.reader__content'));
-  }
-  function countSelectionLines(sel) {
-    if (!sel || !sel.rangeCount) return 0;
-    const rects = sel.getRangeAt(0).getClientRects(); if (!rects.length) return 0;
-    const tops = [];
-    for (let i = 0; i < rects.length; i++) {
-      const r = rects[i];
-      if (r.width < 1 || r.height < 1) continue;
-      const top = Math.round(r.top / 2) * 2;
-      if (!tops.includes(top)) tops.push(top);
-    }
-    return tops.length;
-  }
-  function trimSelectionToMaxLines(sel) {
-    if (!sel || !sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const lines = [];
-    const walker = document.createTreeWalker(
-      range.commonAncestorContainer.nodeType === 3 ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer,
-      NodeFilter.SHOW_TEXT, null
-    );
-    let node;
-    while ((node = walker.nextNode())) {
-      if (!range.intersectsNode(node)) continue;
-      if (!isInsideReader(node)) continue;
-      const textLen = node.nodeValue.length;
-      for (let i = 0; i < textLen; i++) {
-        const r = document.createRange(); r.setStart(node, i); r.setEnd(node, i + 1);
-        const rect = r.getBoundingClientRect(); if (rect.width < 0.1) continue;
-        const top = Math.round(rect.top / 2) * 2;
-        let line = lines.find(l => l.top === top);
-        if (!line) lines.push({ top, firstNode: node, firstOffset: i, lastNode: node, lastOffset: i + 1 });
-        else { line.lastNode = node; line.lastOffset = i + 1; }
-      }
-    }
-    if (lines.length <= MAX_LINES) return;
-    lines.sort((a, b) => a.top - b.top);
-    const keep = lines.slice(-MAX_LINES);
-    const first = keep[0], last = keep[keep.length - 1];
-    selectionGuardLock = true;
-    try {
-      const newRange = document.createRange();
-      newRange.setStart(first.firstNode, first.firstOffset);
-      newRange.setEnd(last.lastNode, last.lastOffset);
-      sel.removeAllRanges(); sel.addRange(newRange);
-      showCopyToast('Максимум ' + MAX_LINES + ' строк');
-    } catch (e) {
-      sel.removeAllRanges(); showCopyToast('Максимум ' + MAX_LINES + ' строк');
-    }
-    selectionGuardLock = false;
-  }
-  document.addEventListener('selectionchange', () => {
-    if (selectionGuardLock || isMobileReader()) return;
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount || sel.isCollapsed) return;
-    if (!isInsideReader(sel.anchorNode) && !isInsideReader(sel.focusNode)) return;
-    if (countSelectionLines(sel) > MAX_LINES) trimSelectionToMaxLines(sel);
-  });
-  document.addEventListener('copy', (e) => {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    if (!isInsideReader(sel.anchorNode) && !isInsideReader(sel.focusNode)) return;
-    if (countSelectionLines(sel) > MAX_LINES) { e.preventDefault(); e.stopPropagation(); showCopyToast('Максимум ' + MAX_LINES + ' строк'); }
-  });
-  document.addEventListener('beforecopy', (e) => {
-    if (isMobileReader()) return;
-    const sel = window.getSelection(); if (!sel) return;
-    if (isInsideReader(sel.anchorNode) || isInsideReader(sel.focusNode)) {
-      if (countSelectionLines(sel) > MAX_LINES) { e.preventDefault(); showCopyToast('Максимум ' + MAX_LINES + ' строк'); }
-    }
-  });
-  document.addEventListener('cut', (e) => { if (isInsideReader(e.target)) { e.preventDefault(); showCopyToast('Копирование ограничено.'); } });
-  document.addEventListener('contextmenu', (e) => {
-    if (isMobileReader()) return;
-    if (isInsideReader(e.target)) { e.preventDefault(); showCopyToast('Правая кнопка отключена. Выделяйте до ' + MAX_LINES + ' строк.'); return false; }
-  });
-  document.addEventListener('keydown', (e) => {
-    if (isMobileReader()) return;
-    const isSelectAll = (e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A');
-    if (isSelectAll && isInsideReader(document.activeElement)) { e.preventDefault(); showCopyToast('Выделить всё в теме нельзя. Максимум ' + MAX_LINES + ' строк.'); }
-  });
-
   // ---------- ПРОДОЛЖИТЬ ЧТЕНИЕ ----------
   const LAST_READ_KEY = 'doro.lastRead';
   function saveLastRead(subjectKey, topicNum) {
@@ -6120,667 +4736,11 @@ function renderPreparations(preparations, tasks) {
   // ---------- НАВЕРХ ----------
   const islandProgressUp = $('islandProgressUp');
   if (islandProgressUp) islandProgressUp.addEventListener('click', (e) => { e.stopPropagation(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
-  // ============================================================
-  //  ОНБОРДИНГ НОВОГО ПОЛЬЗОВАТЕЛЯ
-  // ============================================================
-  const ONBOARD_DONE_KEY = 'doro.onboarded.v4'; // v4 заставит всех пройти регистрацию заново
-
-    (function initOnboard() {
-    const onboard       = $('onboard');
-    const nameInp       = $('onboardName');
-    const nextBtn       = $('onboardNext');
-    const nextBtn2      = $('onboardNext2');
-    const finishBtn     = $('onboardFinish');
-    const stepLabel     = $('onboardStep');
-    const avatarLetter  = $('onboardAvatarLetter');
-    const avatarEl      = $('onboardAvatar');
-    const lettersInp    = $('onboardGroupLetters');
-    const yearSel       = $('onboardGroupYear');
-    const numSel        = $('onboardGroupNum');
-    const chipsWrap     = $('onboardStatusChips');
-    const colorsWrap    = $('onboardColors');
-    const panels        = Array.from(document.querySelectorAll('.onboard__step-panel'));
-
-    if (!onboard) return;
-
-    let draft = { name: '', group: '', status: USER_STATUSES[0], color: '#3b82f6' };
-
-    // Предзаполнение из уже сохранённого профиля (если онбординг проходят повторно)
-    if (user) {
-      if (user.name && nameInp) { nameInp.value = user.name; draft.name = user.name; if (nextBtn) nextBtn.disabled = false; }
-      const parts = parseGroup(user.group || '');
-      if (lettersInp) lettersInp.value = parts.letters || '';
-      if (yearSel && parts.year) yearSel.value = parts.year;
-      if (numSel && parts.num) numSel.value = parts.num;
-      if (user.color) draft.color = user.color;
-      if (user.status) draft.status = user.status;
-    }
-
-
-    if (chipsWrap) {
-      chipsWrap.innerHTML = '';
-      USER_STATUSES.forEach((s, i) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'onboard__chip' + (i === 0 ? ' is-selected' : '');
-        b.dataset.value = s;
-        b.textContent = s;
-        b.addEventListener('click', () => {
-          draft.status = s;
-          chipsWrap.querySelectorAll('.onboard__chip').forEach(c => c.classList.toggle('is-selected', c === b));
-        });
-        chipsWrap.appendChild(b);
-      });
-    }
-
-    const COLORS = ['#3b82f6','#16a34a','#ea580c','#9333ea','#0891b2','#e11d48','#ca8a04','#475569'];
-    if (colorsWrap) {
-      colorsWrap.innerHTML = '';
-      COLORS.forEach((c, i) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'onboard__color' + (i === 0 ? ' is-selected' : '');
-        b.dataset.color = c;
-        b.style.background = `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 60%, #fff))`;
-        b.addEventListener('click', () => {
-          draft.color = c;
-          colorsWrap.querySelectorAll('.onboard__color').forEach(x => x.classList.toggle('is-selected', x.dataset.color === c));
-          paintOnboardAvatar();
-        });
-        colorsWrap.appendChild(b);
-      });
-    }
-
-    paintOnboardAvatar(); // сразу отрисовать аватар с предзаполненными данными
-
-    function paintOnboardAvatar() {
-      const name = draft.name.trim();
-      if (avatarLetter) avatarLetter.textContent = name ? name[0].toUpperCase() : '?';
-      if (avatarEl) {
-        avatarEl.style.background = `linear-gradient(135deg, ${draft.color}, color-mix(in srgb, ${draft.color} 60%, #fff))`;
-        avatarEl.classList.remove('is-popping');
-        void avatarEl.offsetWidth;
-        avatarEl.classList.add('is-popping');
-      }
-    }
-    paintOnboardAvatar();
-
-    function goTo(n) {
-      panels.forEach(p => p.classList.toggle('is-active', Number(p.dataset.step) === n));
-      if (stepLabel) stepLabel.textContent = `Шаг ${n} из 3`;
-      if (n === 1 && nameInp) setTimeout(() => nameInp.focus(), 200);
-    }
-
-    if (nameInp) {
-      nameInp.addEventListener('input', () => {
-        draft.name = nameInp.value;
-        if (nextBtn) nextBtn.disabled = !nameInp.value.trim();
-        paintOnboardAvatar();
-      });
-      nameInp.addEventListener('keydown', e => { if (e.key === 'Enter' && nextBtn && !nextBtn.disabled) nextBtn.click(); });
-    }
-    // Проверка «настоящего» имени: 2+ буквы, только буквы/дефис, не «человек»/«ник»
-    function isRealName(raw) {
-      const v = (raw || '').trim();
-      if (!v) return false;
-      if (!/^[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z\-]{1,}$/.test(v)) return false; // минимум 2 буквы
-      const bad = ['человек','чел','ник','никнейм','имя','тест','test','user','юзер','аноним','anon','none','нет','не знаю'];
-      if (bad.includes(v.toLowerCase())) return false;
-      return true;
-    }
-
-    if (nameInp) {
-      nameInp.addEventListener('input', () => {
-        const ok = isRealName(nameInp.value);
-        if (nextBtn) nextBtn.disabled = !ok;
-      });
-    }
-
-    if (nextBtn) {
-      nextBtn.addEventListener('click', () => {
-        if (!nameInp) return;
-        const val = nameInp.value.trim();
-        if (!isRealName(val)) {
-          alert('Пожалуйста, укажите настоящее имя (например, «Аня» или «Антон»). Ники, «человек» и одна буква не подходят.');
-          return;
-        }
-        draft.name = val.split(/\s+/)[0];
-        nameInp.value = draft.name;
-        goTo(2);
-      });
-    }
-    // ---------- Пикер группы: цепочка Буквы → Год → Номер ----------
-    let chain = null;
-    if (lettersInp && yearSel && numSel) {
-      chain = setupGroupChain({
-        letters: lettersInp,
-        year:    yearSel,   // теперь это <input>, ID оставили
-        num:     numSel,
-        onChange: (parts, complete) => {
-          if (nextBtn2) nextBtn2.disabled = !complete;
-        }
-      });
-      // предзаполнение из уже сохранённого профиля (если есть)
-      const parts = parseGroup((user && user.group) || '');
-      if (parts.letters || parts.year || parts.num) {
-        chain.setParts({
-          letters: parts.letters || '',
-          year:    parts.year    || '',
-          num:     parts.num     || ''
-        });
-      }
-      if (nextBtn2) nextBtn2.disabled = !chain.isComplete();
-    }
-
-    if (nextBtn2) {
-      nextBtn2.addEventListener('click', () => {
-        if (!chain || !chain.isComplete()) {
-          alert('Заполните все три поля группы: буквы, год, номер.');
-          return;
-        }
-        const groupStr = formatGroup(chain.getParts());
-        if (isGroupFull(groupStr)) {
-          alert(`Группа ${groupStr} закрыта для новых участников (полная группа). Выберите другую группу.`);
-          return;
-        }
-        draft.group = groupStr;
-        goTo(3);
-      });
-    }
-
-    if (finishBtn) {
-      finishBtn.addEventListener('click', async () => {
-        // Дополнительная страховка: группа не должна быть пустой
-        if (!draft.group) {
-          alert('Пожалуйста, укажи группу перед завершением.');
-          goTo(2); // возвращаем на шаг с группой
-          return;
-        }
-
-        finishBtn.disabled = true;
-        finishBtn.textContent = 'Сохраняю…';
-
-        user = user || {};
-        user.name   = draft.name;
-        user.group  = draft.group; // Теперь тут точно не пусто
-        user.status = draft.status || USER_STATUSES[0];
-        user.color  = draft.color;
-        saveUser();
-        localStorage.setItem(ONBOARD_DONE_KEY, '1');
-
-        try {
-          if (window.doroCloudReady) {
-            const cloud = await window.doroCloudReady;
-            if (cloud) {
-              const result = await cloud.claimIdentity(user);
-              if (result && result.removed > 0) {
-                try { localStorage.removeItem('doro.usersCache.v2'); } catch (e) {}
-                usersCache = null;
-                usersCacheTime = 0;
-              }
-            }
-          }
-        } catch (e) { 
-          // Если лимит превышен или ошибка сети — не блокируем вход!
-          console.warn('Ошибка облака (пропускаем):', e.message); 
-        }
-
-        onboard.classList.remove('is-open');
-        onboard.setAttribute('aria-hidden', 'true');
-        document.body.classList.remove('onboard-open');
-
-        renderProfile();
-        if (typeof paintThemeToggleBtn === 'function') paintThemeToggleBtn();
-        if (typeof window.__refreshSchedule === 'function') window.__refreshSchedule();
-        showView('profile');
-      });
-    }
-
-    // Старый онбординг полностью отключён — его заменила authModal.
-  })();
-
-  // ============================================================
-  //  МОДАЛКА: ОБЯЗАТЕЛЬНАЯ ГРУППА
-  // ============================================================
-  (function initGroupRequiredModal() {
-    const modal      = $('groupRequiredModal');
-    const lettersInp = $('reqGroupLetters');
-    const yearInp    = $('reqGroupYear');
-    const numInp     = $('reqGroupNum');
-    const saveBtn    = $('reqGroupSave');
-
-    if (!modal || !lettersInp || !yearInp || !numInp || !saveBtn) return;
-
-    let chain = null;
-
-    // Инициализация цепочки
-    chain = setupGroupChain({
-      letters: lettersInp,
-      year:    yearInp,
-      num:     numInp,
-      onChange: (parts, complete) => {
-        saveBtn.disabled = !complete;
-      }
-    });
-    saveBtn.disabled = !chain.isComplete();
-
-    // Предзаполнение, если у пользователя уже что-то было (частично)
-    const parts = parseGroup((user && user.group) || '');
-    if (parts.letters || parts.year || parts.num) {
-      chain.setParts({
-        letters: parts.letters || '',
-        year:    parts.year    || '',
-        num:     parts.num     || ''
-      });
-    }
-
-    saveBtn.addEventListener('click', async () => {
-      if (!chain.isComplete()) {
-        alert('Заполните все три поля: буквы, год, номер.');
-        return;
-      }
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Сохраняю…';
-
-      if (!user) user = {};
-      user.group = formatGroup(chain.getParts());
-      saveUser();
-
-      try {
-        if (window.doroCloudReady) {
-          const cloud = await window.doroCloudReady;
-          if (cloud) await cloud.saveProfile(user);
-        }
-      } catch (e) { console.warn('Cloud save failed:', e); }
-
-      modal.classList.remove('is-open');
-      modal.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('onboard-open');
-
-      renderProfile();
-      if (typeof window.__refreshSchedule === 'function') window.__refreshSchedule();
-    });
-
-    // Показ модалки, если нужно
-    const onboardDone = localStorage.getItem(ONBOARD_DONE_KEY) === '1';
-    if (user && user.name && !user.group && onboardDone) {
-      setTimeout(() => {
-        modal.classList.add('is-open');
-        modal.setAttribute('aria-hidden', 'false');
-        document.body.classList.add('onboard-open');
-        setTimeout(() => chain.focusFirst(), 400);
-      }, 1000);
-    }
-  })();
-
-  // ============================================================
-  //  ВХОД / РЕГИСТРАЦИЯ (2 экрана: выбор → форма)
-  // ============================================================
-  const AUTH_LOGIN_KEY = 'doro.lastLogin';
-  const authModal    = $('authModal');
-  const authStep     = $('authStep');
-  const authTitle    = $('authTitle');
-  const authFormTitle = $('authFormTitle');
-  const authNoteText = $('authNoteText');
-  const authName     = $('authName');
-  const authLetters  = $('authGroupLetters');
-  const authYear     = $('authGroupYear');
-  const authNum      = $('authGroupNum');
-  const authPassword = $('authPassword');
-  const authSubmit   = $('authSubmit');
-  const authError    = $('authError');
-  const authBack     = $('authBack');
-
-  let authMode = 'register'; // 'login' | 'register'
-  let authChain = null;
-
-  function showAuthError(msg) {
-    if (authError) { authError.textContent = msg || ''; authError.style.display = msg ? 'block' : 'none'; }
-  }
-  function clearAuthError() { showAuthError(''); }
-
-  // Показ экрана «выбор» или «форма»
-  function showAuthScreen(name) {
-    authModal.querySelectorAll('.auth-screen').forEach(s => {
-      s.classList.toggle('is-active', s.dataset.authScreen === name);
-    });
-    clearAuthError();
-  }
-
-  const AUTH_TEXT = {
-    login: {
-      step: 'Вход в doro',
-      title: 'Войти в аккаунт',
-      submit: 'Войти',
-      note: '<strong>Уже заходили раньше?</strong> Введите то же имя и группу, что и тогда, и придумайте пароль — мы найдём ваш старый профиль и привяжем к нему этот пароль.',
-    },
-    register: {
-      step: 'Регистрация',
-      title: 'Создать аккаунт',
-      submit: 'Создать аккаунт',
-      note: '<strong>Пароль нужен для входа с любого устройства.</strong> Логин — это ваше имя и группа (например, «аня лд2511»). Придумайте пароль от 6 символов и запомните его.',
-    },
-  };
-
-  function paintAuthForm() {
-    const t = AUTH_TEXT[authMode];
-    if (authStep)  authStep.textContent  = t.step;
-    if (authFormTitle) authFormTitle.textContent = t.title;
-    if (authSubmit) authSubmit.textContent = t.submit;
-    if (authNoteText) authNoteText.innerHTML = t.note;
-    if (authPassword) authPassword.setAttribute('autocomplete', authMode === 'register' ? 'new-password' : 'current-password');
-  }
-
-  function openAuth(mode, screen) {
-    if (!authModal) return;
-    authMode = (mode === 'login') ? 'login' : 'register';
-    clearAuthError();
-
-    // Если экран не задан — открываем «выбор»
-    const startScreen = screen || 'choice';
-
-    if (startScreen === 'form') {
-      const savedName  = (user && user.name)  ? user.name  : '';
-      const savedGroup = (user && user.group) ? user.group : '';
-
-      if (authName)     authName.value     = savedName;
-      if (authPassword) authPassword.value = '';
-
-      const parts = parseGroup(savedGroup);
-      if (authChain) {
-        authChain.setParts({
-          letters: parts.letters || '',
-          year:    parts.year    || '',
-          num:     parts.num     || ''
-        });
-      } else {
-        if (authLetters) authLetters.value = parts.letters || '';
-        if (authYear)    authYear.value    = parts.year    || '';
-        if (authNum)     authNum.value     = parts.num     || '';
-      }
-
-      const av = $('authAvatarLetter');
-      if (av) {
-        const n = (authName.value || '').trim();
-        av.textContent = n ? n[0].toUpperCase() : '?';
-      }
-
-      paintAuthForm();
-    } else {
-      // Экран «выбор»
-      if (authStep) authStep.textContent = 'Вход в doro';
-      const av = $('authAvatarLetter');
-      if (av) av.textContent = '?';
-    }
-
-    showAuthScreen(startScreen);
-    authModal.classList.add('is-open');
-    authModal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('onboard-open');
-  }
-
-  function closeAuth() {
-    if (!authModal) return;
-    authModal.classList.remove('is-open');
-    authModal.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('onboard-open');
-  }
-
-  if (authModal) {
-    // Цепочка группы в форме
-    if (authLetters && authYear && authNum) {
-      authChain = setupGroupChain({
-        letters: authLetters,
-        year:    authYear,
-        num:     authNum,
-        onChange: () => {}
-      });
-    }
-
-    // ---- Экран выбора ----
-    const chooseNewBtn = $('authChooseNew');
-    const chooseOldBtn = $('authChooseOld');
-
-    if (chooseNewBtn) chooseNewBtn.addEventListener('click', () => {
-      authMode = 'register';
-      openAuth('register', 'form');
-    });
-
-    if (chooseOldBtn) chooseOldBtn.addEventListener('click', () => {
-      authMode = 'login';
-      openAuth('login', 'form');
-    });
-
-    // ---- Кнопка «Назад» ----
-    if (authBack) authBack.addEventListener('click', () => {
-      showAuthScreen('choice');
-      if (authStep) authStep.textContent = 'Вход в doro';
-    });
-
-    // ---- Автокапитализация букв ----
-    if (authLetters) authLetters.addEventListener('input', () => {
-      authLetters.value = normalizeGroupLetters(authLetters.value);
-    });
-
-    // ---- Превью аватара ----
-    if (authName) authName.addEventListener('input', () => {
-      const av = $('authAvatarLetter'); if (!av) return;
-      const n = (authName.value || '').trim();
-      av.textContent = n ? n[0].toUpperCase() : '?';
-    });
-
-    // ---- Показать/скрыть пароль ----
-    authModal.querySelectorAll('.password-toggle').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const input = document.getElementById(btn.dataset.target);
-        if (!input) return;
-        const eyeOpen   = btn.querySelector('.eye-open');
-        const eyeClosed = btn.querySelector('.eye-closed');
-        if (input.type === 'password') {
-          input.type = 'text';
-          btn.title = 'Скрыть пароль'; btn.setAttribute('aria-label', 'Скрыть пароль');
-          if (eyeOpen) eyeOpen.style.display = 'none';
-          if (eyeClosed) eyeClosed.style.display = 'block';
-        } else {
-          input.type = 'password';
-          btn.title = 'Показать пароль'; btn.setAttribute('aria-label', 'Показать пароль');
-          if (eyeOpen) eyeOpen.style.display = 'block';
-          if (eyeClosed) eyeClosed.style.display = 'none';
-        }
-      });
-    });
-
-    // ---- Отправка формы ----
-    if (authSubmit) authSubmit.addEventListener('click', async () => {
-      clearAuthError();
-
-      const nameRaw = (authName.value || '').trim();
-      if (!nameRaw) { showAuthError('Введите имя'); return; }
-      const name = nameRaw.split(/\s+/)[0];
-
-      if (!authChain || !authChain.isComplete()) {
-        showAuthError('Заполните все три поля группы: буквы, год, номер.');
-        return;
-      }
-      const group = formatGroup(authChain.getParts());
-
-      const password = authPassword.value;
-      if (!password || password.length < 6) { showAuthError('Пароль должен быть минимум 6 символов'); return; }
-
-      const login = (name.toLowerCase() + '_' + group.toLowerCase());
-
-      authSubmit.disabled = true;
-      authSubmit.textContent = authMode === 'register' ? 'Создаю…' : 'Вхожу…';
-
-      try {
-        const cloud = window.doroCloudReady ? await window.doroCloudReady : null;
-
-        if (!cloud) {
-          if (!user) user = {};
-          user.name = name; user.group = group;
-          user.status = user.status || USER_STATUSES[0];
-          user.color  = user.color  || '#3b82f6';
-          saveUser();
-          localStorage.setItem(ONBOARD_DONE_KEY, '1');
-          localStorage.setItem(AUTH_LOGIN_KEY, login);
-          localStorage.setItem('doro.hasPasswordAccount', '1');
-          closeAuth(); renderProfile(); showView('profile');
-          return;
-        }
-
-        if (authMode === 'register') {
-          await cloud.register(login, password);
-
-          user = user || {};
-          user.name = name; user.group = group;
-          user.status = user.status || USER_STATUSES[0];
-          user.color  = user.color  || '#3b82f6';
-          saveUser();
-
-          try {
-            const claim = await cloud.claimIdentity(user);
-            if (claim && claim.removed > 0) {
-              try { localStorage.removeItem('doro.usersCache.v2'); } catch (e) {}
-              usersCache = null; usersCacheTime = 0;
-            }
-          } catch (e) { console.warn('claimIdentity:', e); }
-
-          localStorage.setItem(ONBOARD_DONE_KEY, '1');
-          localStorage.setItem(AUTH_LOGIN_KEY, login);
-          localStorage.setItem('doro.hasPasswordAccount', '1');
-          closeAuth(); renderProfile(); showView('profile');
-        } else {
-          const result = await cloud.loginOrMigrate(
-            { name, group, status: user?.status || USER_STATUSES[0], color: user?.color || '#3b82f6' },
-            password
-          );
-
-          let profile = await cloud.getMyProfile({ name, group });
-          if (!profile) {
-            user = { 
-              name, group, 
-              status: user?.status || USER_STATUSES[0], 
-              color: user?.color || '#3b82f6',
-              avatarEmoji: '',
-              avatarFrame: 'none',
-              profileBg: 'default',
-              profileBadge: 'none',
-              profileEffect: 'default'
-            };
-            await cloud.saveProfile(user);
-          } else {
-            user = {
-              name:          profile.name          || name,
-              group:         profile.group         || group,
-              status:        profile.status        || USER_STATUSES[0],
-              color:         profile.color         || '#3b82f6',
-              avatarEmoji:   profile.avatarEmoji   || '',
-              avatarFrame:   profile.avatarFrame   || 'none',
-              profileBg:     profile.profileBg     || 'default',
-              profileBadge:  profile.profileBadge  || 'none',
-              profileEffect: profile.profileEffect || 'default'
-            };
-          }
-          saveUser();
-
-          if (result && result.migrated) {
-            alert(result.restored
-              ? 'Нашли ваш старый профиль и привязали к нему пароль. Теперь можно входить с любого устройства.'
-              : 'Пароль создан. Теперь можно входить с любого устройства по этим имени и паролю.');
-            try { localStorage.removeItem('doro.usersCache.v2'); } catch (e) {}
-            usersCache = null; usersCacheTime = 0;
-          }
-
-          localStorage.setItem(ONBOARD_DONE_KEY, '1');
-          localStorage.setItem(AUTH_LOGIN_KEY, login);
-          localStorage.setItem('doro.hasPasswordAccount', '1');
-          closeAuth(); renderProfile(); showView('profile');
-        }
-      } catch (err) {
-        console.error('Auth error:', err);
-        let msg = err.message || 'Ошибка';
-        if (msg.includes('email-already-in-use')) msg = 'Этот логин уже занят. Нажмите «Назад» и выберите «Я уже был здесь».';
-        else if (msg.includes('user-not-found'))  msg = 'Пользователь не найден. Нажмите «Назад» и выберите «Я здесь впервые».';
-        else if (msg.includes('wrong-password') || msg.includes('invalid-credential')) msg = 'Неверный пароль.';
-        else if (msg.includes('invalid-email'))   msg = 'Логин составлен неправильно.';
-        else if (msg.includes('weak-password'))   msg = 'Слишком простой пароль.';
-        showAuthError(msg);
-      } finally {
-        authSubmit.disabled = false;
-        paintAuthForm();
-      }
-    });
-  }
-
-  // ---------- Автозапуск ----------
-  async function bootAuth() {
-    let waitTime = 0;
-    while (!window.doroCloudReady && waitTime < 8000) {
-      await new Promise(r => setTimeout(r, 100));
-      waitTime += 100;
-    }
-
-    const cloud = window.doroCloudReady ? await window.doroCloudReady : null;
-    const hasPasswordAccount = localStorage.getItem('doro.hasPasswordAccount') === '1';
-
-    if (hasPasswordAccount && cloud && !cloud.isAnonymous) {
-      try {
-        const profile = await cloud.getMyProfile(user);
-        if (profile) {
-  user = {
-    name:          profile.name          || '',
-    group:         profile.group         || '',
-    status:        profile.status        || USER_STATUSES[0],
-    color:         profile.color         || '#3b82f6',
-    avatarEmoji:   profile.avatarEmoji   || '',           // <-- добавить
-    avatarFrame:   profile.avatarFrame   || 'none',       // <-- добавить
-    profileBg:     profile.profileBg     || 'default',    // <-- добавить
-    profileBadge:  profile.profileBadge  || 'none',       // <-- добавить
-    profileEffect: profile.profileEffect || 'default'     // <-- добавить
-  };
-  saveUser();
-
-          // Подтягиваем Golden из облака
-          if (profile.premiumActive && (!profile.premiumExpiresAt || profile.premiumExpiresAt > Date.now())) {
-            window.doroPremium.savePremium({
-              active: true,
-              expiresAt: profile.premiumExpiresAt || (Date.now() + 30 * 86400000)
-            });
-            if (typeof renderPremiumPage === 'function') renderPremiumPage();
-            if (typeof renderProfile === 'function') renderProfile();
-          } else {
-            // Если в базе подписки нет или она истекла — принудительно выключаем её в браузере,
-            // чтобы не было рассинхрона (когда в браузере есть, а в базе нет)
-            if (window.doroPremium && window.doroPremium.isPremiumActive()) {
-              window.doroPremium.savePremium({ active: false });
-              if (typeof renderPremiumPage === 'function') renderPremiumPage();
-              if (typeof renderProfile === 'function') renderProfile();
-            }
-          }
-        }
-      } catch (e) { console.warn('profile load:', e); }
-      renderProfile();
-      return;
-    }
-
-    // Открываем окно сразу на экране выбора
-    setTimeout(() => openAuth('register', 'choice'), 400);
-  }
-
-  // Всегда грузим роли в фоне, не дожидаясь контента
-  loadEditorNames();
-
-  if (window.doroContent && window.doroContent.loadAllTopics) {
-    // Не блокируем первый экран загрузкой тем — грузим параллельно
-    Promise.all([
-      window.doroContent.loadAllTopics().catch(e => console.warn('[boot] loadAllTopics:', e))
-    ]).then(() => {
-      if (typeof window.renderSections === 'function') window.renderSections();
-    });
-    bootAuth();
-  } else {
-    bootAuth();
+  if (window.doroContent) {
+    window.doroContent.loadAllTopics().then(() => {
+      if (rendered.files) renderSections();
+      window.__refreshSchedule();
+    }).catch(e => console.warn('Не удалось загрузить локальные темы:', e));
   }
   // ============================================================
   //  ЗАГРУЗЧИК ТЕМЫ — прогресс в шапке + «выпрыг» читалки
@@ -6930,47 +4890,7 @@ function renderPreparations(preparations, tasks) {
   window.openTopic = openTopic;
   window.showView = showView;
 
-  // ============================================================
-  //  Периодическая проверка Golden (раз в 3 минуты)
-  // ============================================================
-  setInterval(async () => {
-    if (!window.doroCloudReady || !window.doroPremium || !user) return;
-    try {
-      const cloud = await window.doroCloudReady;
-      if (!cloud) return;
-      const profile = await cloud.getMyProfile(user);
-      if (!profile) return;
-      if (profile.premiumActive && (!profile.premiumExpiresAt || profile.premiumExpiresAt > Date.now())) {
-        if (!window.doroPremium.isPremiumActive()) {
-          window.doroPremium.savePremium({
-            active: true,
-            expiresAt: profile.premiumExpiresAt || (Date.now() + 30 * 86400000)
-          });
-          if (typeof renderPremiumPage === 'function') renderPremiumPage();
-          if (typeof renderProfile === 'function') renderProfile();
-        }
-      } else {
-        // Golden сняли в админке — отзываем локально
-        if (window.doroPremium.isPremiumActive()) {
-          window.doroPremium.savePremium({ active: false });
-          if (typeof renderPremiumPage === 'function') renderPremiumPage();
-          if (typeof renderProfile === 'function') renderProfile();
-        }
-      }
-    } catch (e) {}
-  }, 180000);
 });
-  // Слушаем событие, когда подписка меняется на сайте
-  document.addEventListener('doro:premium-changed', () => {
-    if (window.doroPremium && window.doroPremium.isPremiumActive()) {
-      // Если подписка появилась, сохраняем её копию в браузер,
-      // чтобы при следующей загрузке она не пропала, даже если Firebase не ответит
-      const p = window.doroPremium.readPremium();
-      localStorage.setItem('doro.premium.backup', JSON.stringify(p));
-    } else {
-      localStorage.removeItem('doro.premium.backup');
-    }
-  });
 // ============================================================
 //  ПРЕДПРОСМОТР ПРОФИЛЯ ПРИ НАВЕДЕНИИ
 // ============================================================
@@ -7003,9 +4923,6 @@ function renderPreparations(preparations, tasks) {
     return (p[0][0] + p[1][0]).toUpperCase();
   }
 
-  function isGolden() {
-    return !!(window.doroPremium && window.doroPremium.isPremiumActive());
-  }
 
   function getMine() {
     try { return JSON.parse(localStorage.getItem('doro.user') || 'null'); } catch (e) { return null; }
@@ -7018,10 +4935,10 @@ function renderPreparations(preparations, tasks) {
     const isMine = !!(me && me.name
       && me.name.toLowerCase() === u.name.toLowerCase()
       && ((me.group || '') === (u.group || '')));
-    const badge = (isGolden() && u.profileBadge && badgeMap[u.profileBadge]) || '';
-    const frame = (isGolden() && u.avatarFrame) ? u.avatarFrame : 'none';
-    const bg    = (isGolden() && u.profileBg)    ? u.profileBg    : 'default';
-    const fx    = (isGolden() && u.profileEffect)? u.profileEffect: 'default';
+    const badge = (u.profileBadge && badgeMap[u.profileBadge]) || '';
+    const frame = (u.avatarFrame) ? u.avatarFrame : 'none';
+    const bg    = (u.profileBg)    ? u.profileBg    : 'default';
+    const fx    = (u.profileEffect)? u.profileEffect: 'default';
 
     const avatarBg = emoji
       ? `linear-gradient(135deg,
@@ -7137,128 +5054,7 @@ function renderPreparations(preparations, tasks) {
   window.addEventListener('scroll', () => {
     if (pop && pop.classList.contains('is-visible') && currentAnchor) position(currentAnchor);
   }, { passive: true });
-  // ============================================================
-//  МОДАЛКА ПОДДЕРЖКИ (GOLDEN)
-// ============================================================
-(function initSupportModal() {
-  const SUPPORT_SEEN_KEY = 'doro.supportModal.seen.v1';
-  const modal    = document.getElementById('supportModal');
-  const closeBtn = document.getElementById('supportModalClose');
-  const backdrop = document.getElementById('supportModalBackdrop');
-  const goBtn    = document.getElementById('supportModalGo');
-
-  if (!modal) return;
-
-  // Показываем окно, только если его еще не видели
-  if (!localStorage.getItem(SUPPORT_SEEN_KEY)) {
-    setTimeout(() => {
-      modal.classList.add('is-open');
-      modal.setAttribute('aria-hidden', 'false');
-    }, 1000); // Небольшая задержка, чтобы сайт успел прогрузиться
-  }
-
-  function closeModal() {
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-    localStorage.setItem(SUPPORT_SEEN_KEY, '1'); // Запоминаем, что видели
-  }
-
-  if (closeBtn) closeBtn.addEventListener('click', closeModal);
-  if (backdrop) backdrop.addEventListener('click', closeModal);
-
-  if (goBtn) {
-    goBtn.addEventListener('click', () => {
-      closeModal();
-      // Перекидываем на вкладку Golden
-      const navLink = document.querySelector('.nav a[data-view="premium"]');
-      if (navLink) navLink.click();
-    });
-  }
-})();
   window.addEventListener('resize', () => {
     if (pop && pop.classList.contains('is-visible') && currentAnchor) position(currentAnchor);
   });
-})();
-
-// ============================================================
-//  МОДАЛКА ОПЛАТЫ GOLDEN (QR + карта + заявка)
-// ============================================================
-(function initPayModal() {
-  const $ = (id) => document.getElementById(id);
-  const modal   = $('payModal');
-  const paidBtn = $('payPaidBtn');
-  const errEl   = $('payError');
-  const success = $('paySuccess');
-  const cardNum = $('payCardNum');
-
-  if (!modal) return;
-
-  function showError(msg) {
-    if (errEl) { errEl.textContent = msg || ''; errEl.style.display = msg ? 'block' : 'none'; }
-  }
-
-  function open() {
-    if (!window.doroPremium) return;
-    if (window.doroPremium.isPremiumActive()) {
-      alert('Golden уже активен');
-      return;
-    }
-
-    showError('');
-    if (success) success.style.display = 'none';
-    if (paidBtn) {
-      paidBtn.style.display = '';
-      paidBtn.disabled = false;
-      paidBtn.textContent = 'Я оплатил(а) · отправить заявку';
-    }
-
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
-
-    window.doroPremium.getMyPaymentRequest().then(req => {
-      if (req && req.status === 'pending') {
-        if (paidBtn) paidBtn.style.display = 'none';
-        if (success) success.style.display = 'flex';
-      }
-    });
-  }
-
-  function close() {
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-  }
-
-  modal.querySelectorAll('[data-pay-close]').forEach(el => {
-    el.addEventListener('click', close);
-  });
-
-  if (cardNum) {
-    cardNum.addEventListener('click', () => {
-      const txt = cardNum.textContent.replace(/\s/g, '');
-      navigator.clipboard?.writeText(txt).then(() => {
-        const old = cardNum.textContent;
-        cardNum.textContent = 'скопировано ✓';
-        setTimeout(() => { cardNum.textContent = old; }, 1200);
-      });
-    });
-  }
-
-  if (paidBtn) {
-    paidBtn.addEventListener('click', async () => {
-      showError('');
-      paidBtn.disabled = true;
-      paidBtn.textContent = 'Отправляю…';
-      try {
-        await window.doroPremium.submitPaymentRequest();
-        paidBtn.style.display = 'none';
-        if (success) success.style.display = 'flex';
-      } catch (e) {
-        showError(e.message || 'Не удалось отправить заявку');
-        paidBtn.disabled = false;
-        paidBtn.textContent = 'Я оплатил(а) · отправить заявку';
-      }
-    });
-  }
-
-  window.__openPayModal = open;
 })();

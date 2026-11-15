@@ -234,20 +234,6 @@
       afterAction: () => new Promise(r => setTimeout(r, 300)),
     },
     {
-      selector: '#tileUsers',
-      title: 'Пользователи',
-      text: 'Список всех, кто пользуется doro. Жми — откроем.',
-      place: 'bottom', padding: 10, radius: 20,
-      action: 'click',
-      afterAction: () => new Promise(r => setTimeout(r, 600)),
-    },
-    {
-      selector: '#panelUsers',
-      title: 'Список пользователей',
-      text: 'Редакторы разделов — отдельно, остальные — по группам.',
-      place: 'top', padding: 12, radius: 22,
-    },
-    {
       selector: '#tileLectures',
       title: 'Лекции',
       text: 'Ближайшие лекции по предметам. Жми — увидишь.',
